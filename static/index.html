@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+    <title>OpenAgent 会话工作台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css?v=20260717e">
+</head>
+<body class="canvas">
+    <!-- Top Nav:固定布局,常驻恢复指令 -->
+    <nav class="top-nav">
+        <div class="nav-left">
+            <span class="spike-mark" aria-hidden="true">✦</span>
+            <span class="brand-wordmark serif">OpenAgent</span>
+        </div>
+        <div class="nav-mid source-tabs" id="source-tabs">
+            <button class="source-tab active" data-source="claude" type="button">Claude</button>
+            <button class="source-tab" data-source="codex" type="button">Codex</button>
+            <button class="source-tab" data-source="opencode" type="button">OpenCode</button>
+        </div>
+        <div class="nav-right resume-bar" id="resume-bar">
+            <code id="resume-cmd" class="resume-code">claude -r <session-id></code>
+            <button class="btn-icon-circular" id="copy-resume-btn" title="复制恢复命令" type="button">⧉</button>
+        </div>
+    </nav>
+
+    <!-- 三栏固定布局 -->
+    <div class="app-grid">
+        <!-- 左:会话列表 -->
+        <aside class="pane sessions-pane">
+            <div class="pane-head">
+                <div class="head-row">
+                    <h2 class="pane-title serif">会话</h2>
+                    <span class="session-count badge-pill" id="session-count">0</span>
+                </div>
+                <input class="text-input search-input" id="search-input" type="text" placeholder="搜索会话标题/ID/目录">
+                <button class="btn-secondary session-refresh-btn" id="session-refresh-btn" type="button" title="重新扫描本地会话">↻ 刷新会话</button>
+                <div class="bulk-bar" id="bulk-bar" style="display:none;">
+                    <label class="bulk-check-all"><input type="checkbox" id="bulk-check-all"><span>全选</span></label>
+                    <span class="bulk-count" id="bulk-count">已选 0</span>
+                    <button class="btn-bulk" id="bulk-copy-paths" type="button">复制路径</button>
+                    <button class="btn-bulk" id="bulk-edit" type="button">批量改名</button>
+                    <button class="btn-bulk btn-bulk-danger" id="bulk-soft-del" type="button">界面删除</button>
+                    <button class="btn-bulk btn-bulk-danger" id="bulk-local-del" type="button">移至回收站</button>
+                </div>
+            </div>
+            <div class="session-list" id="session-list">
+                <div class="empty-state"><p>加载中…</p></div>
+            </div>
+        </aside>
+
+        <!-- 中:会话时间线 -->
+        <main class="pane conversation-pane" id="conversation-pane">
+            <div class="welcome" id="welcome-state">
+                <div class="hero-band">
+                    <div class="hero-copy">
+                        <span class="eyebrow caption-uppercase">OpenAgent Session Workbench</span>
+                        <h1 class="serif hero-title" id="hero-title">Claude · Codex · OpenCode</h1>
+                        <p class="hero-desc body-md" id="hero-desc">统一浏览三家智能体的本地会话。左侧选会话,顶部复制恢复命令。</p>
+                    </div>
+                    <!-- 启动命令生成器:随 source 切换 -->
+                    <div class="code-window-card">
+                        <div class="code-window-header">
+                            <span class="caption-uppercase" id="cmd-source-label">launch command</span>
+                            <span class="status-dot"></span>
+                        </div>
+                        <div class="builder-grid" id="builder-grid"></div>
+                        <pre class="generated-command"><code id="generated-command">claude</code></pre>
+                        <div class="cmd-actions">
+                            <button class="btn-primary" id="copy-command-btn" type="button">复制当前命令</button>
+                            <button class="btn-secondary" id="open-terminal-btn" type="button">打开终端执行</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 本地索引:按具体项目文件夹扫描 -->
+                <section class="catalog-section">
+                    <div class="catalog-heading">
+                        <div>
+                            <span class="eyebrow caption-uppercase">Local Index</span>
+                            <h2 class="serif catalog-title" id="catalog-title">本地索引</h2>
+                            <p class="caption" id="catalog-updated">为具体项目文件夹扫描 MCP / Skills / Agents / Commands。</p>
+                        </div>
+                        <div class="catalog-controls">
+                            <select class="text-input project-root-select" id="project-root-select" title="项目文件夹"></select>
+                            <button class="btn-secondary" id="refresh-catalog-btn" type="button">刷新索引</button>
+                        </div>
+                    </div>
+                    <div class="catalog-kind-tabs" id="catalog-kind-tabs"></div>
+                    <div class="catalog-display" id="catalog-display">
+                        <div class="empty-state"><p>选择上方分类查看。</p></div>
+                    </div>
+                </section>
+
+                <!-- API 临时会话命令生成器 -->
+                <section class="api-session-card" id="api-session-card">
+                    <div class="catalog-heading">
+                        <div>
+                            <span class="eyebrow caption-uppercase">Ephemeral Session</span>
+                            <h2 class="serif catalog-title">临时会话命令(API+Key+模型)</h2>
+                            <p class="caption">输入 API 地址、Key、模型名,生成单次会话生效的启动命令(不写入全局配置,改环境变量生效一次)。</p>
+                        </div>
+                    </div>
+                    <div class="builder-grid" id="api-builder-grid"></div>
+                    <pre class="generated-command api-generated-command"><code id="api-generated-command"></code></pre>
+                    <div class="cmd-actions">
+                        <button class="btn-primary" id="api-copy-btn" type="button">复制临时命令</button>
+                        <label class="api-hide-toggle"><input type="checkbox" id="api-hide-key" checked>隐藏 Key 显示</label>
+                    </div>
+                </section>
+            </div>
+
+            <div class="conversation-view" id="conversation-view" style="display:none;">
+                <div class="conversation-header">
+                    <button class="btn-secondary back-home-btn" id="back-home-btn" type="button">← 返回</button>
+                    <div class="conv-info">
+                        <h1 class="serif conversation-title" id="conversation-title">会话标题</h1>
+                        <div class="conversation-meta">
+                            <span class="badge-pill" id="meta-model"></span>
+                            <span class="badge-pill" id="meta-proj"></span>
+                            <span class="badge-pill" id="meta-time"></span>
+                            <span class="badge-pill meta-file" id="meta-file" title=""></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="message-filters" id="message-filters"></div>
+                <div class="messages-container" id="messages-container"></div>
+            </div>
+        </main>
+    </div>
+
+    <div class="toast" id="toast" style="display:none;"></div>
+
+    <!-- 右键菜单(会话列表) -->
+    <div class="context-menu" id="ctx-menu" style="display:none;">
+        <button class="ctx-item" id="ctx-edit" type="button">✎ 编辑标题</button>
+        <button class="ctx-item" id="ctx-copy-path" type="button">⧉ 复制文件路径</button>
+        <button class="ctx-item" id="ctx-soft-del" type="button">🗂 从界面删除(保留文件)</button>
+        <button class="ctx-item ctx-danger" id="ctx-local-del" type="button">🗑 移至回收站</button>
+    </div>
+
+    <script src="/app.js?v=20260717m"></script>
+</body>
+</html>

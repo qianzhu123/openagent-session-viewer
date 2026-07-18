@@ -1,0 +1,3 @@
+# OpenAgent Session Viewer 依赖清单
+# 本项目仅使用 Python 标准库(http.server, sqlite3, json, argparse 等),
+# 无任何第三方运行时依赖。此文件保留以便将来扩展第三方包与 pip 安装。
