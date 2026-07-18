@@ -135,9 +135,9 @@
     $('welcome-state').style.display = 'block';
   }
   function updateHero() {
-    const map = { claude: ['Claude', 'Claude Code 本机会话,默认读取 ~/.claude/projects。'],
-                   codex: ['Codex', 'Codex CLI 会话,默认读取 ~/.codex/sessions。'],
-                   opencode: ['OpenCode', 'OpenCode 会话,默认读取本地 opencode.db。'] };
+    const map = { claude: ['Claude', 'Local Claude Code sessions, reads from ~/.claude/projects.'],
+                   codex: ['Codex', 'Codex CLI sessions, reads from ~/.codex/sessions.'],
+                   opencode: ['OpenCode', 'OpenCode sessions, reads from the local opencode.db.'] };
     $('hero-title').textContent = map[state.source][0];
     $('hero-desc').textContent = map[state.source][1];
   }

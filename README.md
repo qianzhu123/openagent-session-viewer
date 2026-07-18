@@ -2,9 +2,9 @@
 
 A local web interface to uniformly browse the on-disk session records of three agentic CLIs:
 
-- **Claude Code** — `C:\Users\Light\.claude\projects\**\*.jsonl`
-- **Codex** — `C:\Users\Light\.codex\sessions\YYYY\MM\DD\rollout-*.jsonl`
-- **OpenCode** — `C:\Users\Light\.local\share\opencode\opencode.db` (SQLite)
+- **Claude Code** — `~/.claude/projects/**\*.jsonl`
+- **Codex** — `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
+- **OpenCode** — `~/.local/share/opencode/opencode.db` (SQLite)
 
 ## Design Goals
 
@@ -15,7 +15,6 @@ A local web interface to uniformly browse the on-disk session records of three a
 ## Quick Start
 
 ```bash
-cd D:/code/myweb/openagent-session-viewer
 python server.py --open
 # http://127.0.0.1:8092
 ```
