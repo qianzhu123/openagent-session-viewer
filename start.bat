@@ -37,7 +37,6 @@ if exist ".venv\Scripts\python.exe" (
 )
 if not defined PY (where py >nul 2>&1 && set "PY=py")
 if not defined PY (where python >nul 2>&1 && set "PY=python")
-if not defined PY (if exist "D:\tools\Dev\Runtime\Anaconda\python.exe" set "PY=D:\tools\Dev\Runtime\Anaconda\python.exe")
 
 if not defined PY (
     echo [error] no python found >"%ERRLOG%"

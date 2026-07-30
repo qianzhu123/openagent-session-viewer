@@ -21,7 +21,7 @@ python server.py --open
 
 ## Relationship to the Other Two Viewers
 
-This project lives in the same `D:\code\myweb` directory but **runs independently** and does not depend on the other two projects. Backend parsing logic is split into 3 adapters (see below); the Codex adapter's cleaning rules reference `codex-session-viewer`.
+This project is designed to live alongside `claude-session-viewer` and `codex-session-viewer` but **runs independently** and does not depend on them. Backend parsing logic is split into 3 adapters (see below); the Codex adapter's cleaning rules reference `codex-session-viewer`.
 
 ## Directory Structure
 
@@ -53,6 +53,13 @@ openagent-session-viewer/
 | Claude | `.claude/projects/<encoded-path>/*.jsonl` | JSONL | First user message / summary |
 | Codex | `.codex/sessions/**/rollout-*.jsonl` | JSONL | `session_index.jsonl` / session_meta |
 | OpenCode | `.local/share/opencode/opencode.db` | SQLite | `session.title` |
+
+## UI & Interaction
+
+- **Custom styled dialogs**: All native browser `alert()`/`confirm()` replaced with custom modals following Claude design system (warm canvas colors, serif titles, coral primary buttons)
+- **Non-blocking deletion**: Deleting a session removes it from the UI immediately without reloading the entire session list
+- **Smart context menu**: Right-click menu auto-closes on mouseleave, scroll, or ESC key; positioning prevents overflow at viewport edges
+- **Cache-friendly refresh**: Full session list refresh only happens when explicitly requested (refresh button) or switching sources
 
 ## API
 

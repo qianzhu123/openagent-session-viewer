@@ -9,7 +9,7 @@ All three adapters normalize their raw data into the structure below. The fronte
   "id": "ses_09648f4e",            # raw ID
   "source": "opencode",             # claude | codex | opencode
   "title": "Audit image-gen implementation",
-  "project": "C:/Users/Light",      # equivalent cwd / working directory (used for project grouping)
+  "project": "<cwd>",              # equivalent cwd / working directory (used for project grouping)
   "model": "gpt-5.6-sol",          # normalized into a string where possible
   "agent": "build",                 # optional
   "time_created": 1784093030049,   # millisecond timestamp

@@ -9,7 +9,7 @@
     catalog: null,
     activeKind: null,
     projectRoot: '',   // 本地索引扫描的具体项目文件夹
-    projectOptions: [], // 可选项目目录(默认 C:\Users\Light 等)
+    projectOptions: [], // optional project folders (default cwd of each source, etc.)
     apiDraft: {},       // 临时会话命令各字段草稿,key=字段名,切 source 时 dump/restore,信息保留复用
   };
 
@@ -61,6 +61,101 @@
   function toast(msg) {
     const t = $('toast'); t.textContent = msg; t.style.display = 'block';
     setTimeout(() => t.style.display = 'none', 1800);
+  }
+
+  // ---------- Modal 系统 (替换原生 alert/confirm) ----------
+  function showModal(options) {
+    return new Promise((resolve) => {
+      const overlay = el('div', 'modal-overlay');
+      const card = el('div', 'modal-card');
+
+      if (options.title) {
+        const title = el('h2', options.type === 'confirm' ? 'modal-confirm-title' : 'modal-title');
+        title.textContent = options.title;
+        card.appendChild(title);
+      }
+
+      if (options.message) {
+        const msg = el('div', options.type === 'confirm' ? 'modal-confirm-message' : 'modal-desc');
+        msg.textContent = options.message;
+        card.appendChild(msg);
+      }
+
+      let input = null;
+      if (options.type === 'prompt') {
+        input = el('input', 'modal-input');
+        input.type = 'text';
+        input.value = options.defaultValue || '';
+        if (options.placeholder) input.placeholder = options.placeholder;
+        card.appendChild(input);
+      }
+
+      const actions = el('div', 'modal-actions');
+
+      if (options.type === 'confirm' || options.type === 'prompt') {
+        const cancelBtn = el('button', 'btn-secondary');
+        cancelBtn.textContent = options.cancelText || '取消';
+        cancelBtn.onclick = () => {
+          overlay.remove();
+          resolve(options.type === 'prompt' ? null : false);
+        };
+        actions.appendChild(cancelBtn);
+      }
+
+      const okBtn = el('button', options.danger ? 'btn-primary' : 'btn-primary');
+      if (options.danger) okBtn.style.background = 'var(--error)';
+      okBtn.textContent = options.okText || (options.type === 'alert' ? '确定' : '确认');
+      okBtn.onclick = () => {
+        overlay.remove();
+        if (options.type === 'prompt') {
+          resolve(input ? input.value.trim() : '');
+        } else {
+          resolve(true);
+        }
+      };
+      actions.appendChild(okBtn);
+
+      card.appendChild(actions);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+
+      if (input) {
+        input.focus();
+        input.select();
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') okBtn.click();
+          if (e.key === 'Escape') overlay.remove();
+        });
+      } else {
+        okBtn.focus();
+      }
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          overlay.remove();
+          resolve(options.type === 'prompt' ? null : false);
+        }
+      });
+    });
+  }
+
+  function showAlert(message, title = '提示') {
+    return showModal({ type: 'alert', title, message });
+  }
+
+  function showConfirm(message, title = '确认操作', options = {}) {
+    return showModal({
+      type: 'confirm',
+      title,
+      message,
+      danger: options.danger || false,
+      okText: options.okText,
+      cancelText: options.cancelText
+    });
+  }
+
+  function showPrompt(message, defaultValue = '', title = '输入', placeholder = '') {
+    return showModal({ type: 'prompt', title, message, defaultValue, placeholder });
   }
   function quotePS(v) { v = String(v || '').trim(); return v ? `"${v.replace(/`/g, '``').replace(/"/g, '`"')}"` : ''; }
   function quoteArg(v) { v = String(v || '').trim(); return v ? `"${v.replace(/"/g, '\\"')}"` : ''; }
@@ -330,19 +425,57 @@
   // ---------- 右键菜单 ----------
   let ctxTarget = null;
   const ctxMenu = $('ctx-menu');
+
   function openCtxMenu(ev, session) {
     ctxTarget = session;
     ctxMenu.style.display = 'block';
-    const x = Math.min(ev.clientX, window.innerWidth - 240);
-    const y = Math.min(ev.clientY, window.innerHeight - 140);
+
+    // 先让浏览器计算菜单实际尺寸
+    const menuW = ctxMenu.offsetWidth || 224;
+    const menuH = ctxMenu.offsetHeight || 160;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const MARGIN = 8;
+
+    // 优先在鼠标右下方展示；若超出视口边界则翻转
+    let x = ev.clientX;
+    let y = ev.clientY;
+    if (x + menuW + MARGIN > vw) x = vw - menuW - MARGIN;
+    if (y + menuH + MARGIN > vh) y = vh - menuH - MARGIN;
+    x = Math.max(MARGIN, x);
+    y = Math.max(MARGIN, y);
+
     ctxMenu.style.left = x + 'px';
     ctxMenu.style.top = y + 'px';
+
+    // 挂载关闭监听
+    setTimeout(() => {
+      document.addEventListener('click', hideCtxMenu, { once: true });
+      document.addEventListener('contextmenu', onCtxDocRight);
+      document.addEventListener('keydown', onCtxEsc);
+      ctxMenu.addEventListener('mouseleave', hideCtxMenu, { once: true });
+      // 任意滚动关闭（在捕获阶段监听，命中后 once 自动移除）
+      window.addEventListener('wheel', hideCtxMenu, { capture: true, once: true, passive: true });
+      document.querySelector('.session-list')?.addEventListener('scroll', hideCtxMenu, { once: true });
+    }, 0);
   }
-  function hideCtxMenu() { ctxMenu.style.display = 'none'; }
-  document.addEventListener('click', hideCtxMenu);
-  document.addEventListener('contextmenu', (e) => {
+
+  function onCtxDocRight(e) {
     if (!e.target.closest('.session-item')) hideCtxMenu();
-  });
+  }
+  function onCtxEsc(e) {
+    if (e.key === 'Escape') hideCtxMenu();
+  }
+
+  function hideCtxMenu() {
+    ctxMenu.style.display = 'none';
+    // 清理所有残留监听（多次调用 remove 无害）
+    document.removeEventListener('contextmenu', onCtxDocRight);
+    document.removeEventListener('keydown', onCtxEsc);
+    ctxMenu.removeEventListener('mouseleave', hideCtxMenu);
+    window.removeEventListener('wheel', hideCtxMenu, { capture: true });
+    document.querySelector('.session-list')?.removeEventListener('scroll', hideCtxMenu);
+  }
   $('ctx-edit').onclick = () => { hideCtxMenu(); if (ctxTarget) showEditDialog(ctxTarget); };
   $('ctx-copy-path').onclick = async () => {
     hideCtxMenu();
@@ -360,43 +493,73 @@
   }
 
   function showEditDialog(s) {
-    const bd = el('div', 'modal-layer'); bd.style.cssText = 'position:fixed;inset:0;background:rgba(20,20,19,0.4);z-index:300;display:flex;align-items:center;justify-content:center';
-    bd.innerHTML = `
-      <div style="width:min(420px,92vw);background:var(--canvas);border:1px solid var(--hairline);border-radius:var(--r-lg);padding:20px">
-        <h3 class="serif" style="font-size:20px;margin:0 0 12px">编辑会话标题别名</h3>
-        <p style="font-size:12.5px;color:var(--muted);margin:0 0 14px">仅修改本地展示别名,不改原始会话文件。留空则恢复原标题。</p>
-        <input id="edit-name" type="text" value="${escapeHtml(s.title || '').replace(/"/g,'"')}"
-          style="width:100%;min-height:40px;border:1px solid var(--hairline);border-radius:var(--r-sm);background:var(--canvas);color:var(--ink);padding:9px 12px;font-size:14px" />
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
-          <button class="btn-secondary" data-cancel>取消</button>
-          <button class="btn-primary" data-save>保存</button>
-        </div>
-      </div>`;
-    document.body.appendChild(bd);
-    const inp = bd.querySelector('#edit-name'); inp.focus(); inp.select();
-    bd.querySelector('[data-cancel]').onclick = () => bd.remove();
-    bd.querySelector('[data-save]').onclick = async () => {
+    const overlay = el('div', 'modal-overlay');
+    const card = el('div', 'modal-card');
+
+    const title = el('h2', 'modal-title'); title.textContent = '编辑会话标题别名'; card.appendChild(title);
+    const desc = el('p', 'modal-desc');
+    desc.textContent = '仅修改本地展示别名，不改原始会话文件。留空则恢复原标题。';
+    card.appendChild(desc);
+
+    const inp = el('input', 'modal-input');
+    inp.type = 'text'; inp.value = s.title || ''; card.appendChild(inp);
+
+    const actions = el('div', 'modal-actions');
+    const cancelBtn = el('button', 'btn-secondary'); cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => overlay.remove();
+    const saveBtn = el('button', 'btn-primary'); saveBtn.textContent = '保存';
+    saveBtn.onclick = async () => {
       try {
         await postJSON('/api/sessions/meta', { source: state.source, sessionId: s.id, titleAlias: inp.value.trim() });
-        toast('标题已更新'); bd.remove(); loadSessions();
-      } catch (e) { toast(`保存失败:${e.message}`); }
+        toast('标题已更新');
+        overlay.remove();
+        // 只更新列表中该条目的标题，不整体刷新
+        const item = $('session-list').querySelector(`.session-item[data-id="${s.id}"]`);
+        if (item) {
+          const newTitle = inp.value.trim() || s.id;
+          item.querySelector('.si-title').textContent = newTitle;
+          item.dataset.title = newTitle;
+        }
+      } catch (e) { toast(`保存失败：${e.message}`); }
     };
-    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') bd.querySelector('[data-save]').click(); if (e.key === 'Escape') bd.remove(); });
+    actions.appendChild(cancelBtn); actions.appendChild(saveBtn);
+    card.appendChild(actions);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    inp.focus(); inp.select();
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') saveBtn.click();
+      if (e.key === 'Escape') overlay.remove();
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   }
 
   async function deleteSession(s, method) {
     const tip = method === 'soft'
-      ? '从界面删除?(标记隐藏,会话文件仍保留在磁盘)'
-      : '移至回收站?(文件进系统回收站,可从回收站恢复)';
-    if (!confirm(`「${s.title || s.id}」\n${tip}`)) return;
+      ? '标记隐藏，会话文件仍保留在磁盘。'
+      : '文件将进入系统回收站，可从回收站恢复。';
+    const confirmed = await showConfirm(
+      `「${s.title || s.id}」\n\n${tip}`,
+      method === 'soft' ? '从界面删除' : '移至回收站',
+      { danger: method !== 'soft', okText: method === 'soft' ? '确认删除' : '移至回收站' }
+    );
+    if (!confirmed) return;
     const url = method === 'soft' ? '/api/sessions/delete' : '/api/sessions/delete-local';
     try {
       const r = await postJSON(url, { source: state.source, sessionId: s.id });
-      if (r && r.error) { toast(`删除失败:${r.error}`); return; }
+      if (r && r.error) { toast(`删除失败：${r.error}`); return; }
       toast(method === 'soft' ? '已从界面删除' : '已移至回收站');
+      // 直接从 DOM 移除该条目，不刷新整个列表
+      const item = $('session-list').querySelector(`.session-item[data-id="${s.id}"]`);
+      if (item) item.remove();
+      // 更新计数
+      const countEl = $('session-count');
+      const cur = parseInt(countEl.textContent || '0', 10);
+      if (cur > 0) countEl.textContent = cur - 1;
+      // 若正在查看该会话，退回首页
       if (state.currentSessionId === s.id) $('back-home-btn').click();
-      loadSessions();
-    } catch (e) { toast(`删除失败:${e.message}`); }
+    } catch (e) { toast(`删除失败：${e.message}`); }
   }
 
   let searchTimer;

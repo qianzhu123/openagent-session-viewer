@@ -1,7 +1,8 @@
-"""Claude Code adapter: 扫描 .claude/projects 下的 JSONL。
+"""Claude Code adapter: scans ~/.claude/projects JSONL files.
 
-路径形如 ~/.claude/projects/C--Users-Light/<uuid>.jsonl
-每行一条 event(u/assistant 消息块含 message.content,tool_use/tool_result 成对)。
+Paths look like ~/.claude/projects/<encoded-cwd>/<uuid>.jsonl
+Each line is one event (user/assistant message blocks with message.content;
+tool_use/tool_result come in pairs).
 """
 from __future__ import annotations
 import json, os, glob
@@ -11,9 +12,10 @@ PROJ_DIR = os.path.expanduser("~/.claude/projects")
 
 
 def _decode_project(path_or_dir: str) -> str:
-    # Claude 把 cwd 编码进目录名:C--Users-Light 表示 C:\Users\Light
-    # 规则(官方 decode): "--" -> ":\",其他 "-" -> "\"
-    # 入参若是文件路径,取其所在目录名再解码
+    # Claude encodes the cwd into the folder name, e.g. an encoded segment like
+    # "C--code--myapp" decodes to the Windows working directory "C:\code\myapp".
+    # Rule (official decode): "--" -> ":\\", every other "-" -> "\\".
+    # If the input is a file path, take its parent folder name and decode that.
     if os.path.isfile(path_or_dir):
         base = os.path.basename(os.path.dirname(path_or_dir))
     else:
