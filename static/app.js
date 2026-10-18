@@ -264,6 +264,9 @@
     renderCmdBuilder(true);
     buildApiFields();
     restoreFromDraft();
+    // 切源重置搜索状态(输入保留,重跑;全文命中缓存失效)
+    lastFullQuery = null;
+    if ($('search-results-note')) $('search-results-note').style.display = 'none';
     showHome();              // 切 source 一律回首页,不再停留旧会话视图
     loadSessions();
     loadCatalog();
@@ -444,6 +447,7 @@
       $('session-count').textContent = res.total || 0;
       fillProjectRootSelect(res.projects || []);
       list.innerHTML = '';
+      state.lastSessions = res.sessions || [];
       (res.sessions || []).forEach(s => list.appendChild(sessionItem(s)));
       if (state.currentSessionId) openSessionFromURL(state.currentSessionId, false);
     } catch (e) {
@@ -468,11 +472,12 @@
   };
   $('refresh-catalog-btn').onclick = () => { toast('正在刷新…'); loadSessions(true); loadCatalog(true); };
 
-  function sessionItem(s) {
+  function sessionItem(s, hits) {
     const item = el('div', 'session-item' + (s.id === state.currentSessionId ? ' active' : ''));
     item.dataset.id = s.id;
     item.dataset.source = state.source;
     item.dataset.title = s.title || s.id;
+    item.dataset.project = s.project || '';
     if (s.filePath) item.dataset.filePath = s.filePath;
     const title = el('div', 'si-title'); title.textContent = s.title || s.id; item.appendChild(title);
     const meta = el('div', 'si-meta');
@@ -498,6 +503,22 @@
       item.appendChild(pathRow);
     }
     item.onclick = () => openSession(s.id, s.title || s.id);
+    // 全文搜索命中片段(可选)
+    if (hits && hits.length) {
+      const hitBox = el('div', 'si-hits');
+      hitBox.textContent = `命中 ${hits.length} 处`;
+      hits.slice(0, 3).forEach(hm => {
+        const sn = el('span', 'hit-snippet');
+        // 片段内命中段用 <mark> 高亮
+        sn.textContent = '';
+        const pre = document.createTextNode(hm.snippet.slice(0, hm.hitStart));
+        const midEl = el('mark'); midEl.textContent = hm.snippet.slice(hm.hitStart, hm.hitEnd);
+        const post = document.createTextNode(hm.snippet.slice(hm.hitEnd));
+        sn.appendChild(pre); sn.appendChild(midEl); sn.appendChild(post);
+        hitBox.appendChild(sn);
+      });
+      item.appendChild(hitBox);
+    }
     // 右键菜单
     item.addEventListener('contextmenu', (ev) => { ev.preventDefault(); openCtxMenu(ev, s); });
     return item;
@@ -647,16 +668,73 @@
     } catch (e) { toast(`删除失败：${e.message}`); }
   }
 
+  // ---------- 会话搜索 ----------
+  // 两种模式:
+  //  - 默认(元数据):对已加载列表做客户端过滤(标题/ID/目录/文件路径),瞬时且不受服务端缓存影响。
+  //  - 全文(勾选):调 /api/search 扫会话正文,渲染命中片段卡片。
   let searchTimer;
+  let lastFullQuery = null;
   $('search-input').oninput = () => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(filterSessions, 200);
+    searchTimer = setTimeout(runSearch, 250);
   };
-  async function filterSessions() {
+  if ($('search-full-chk')) {
+    $('search-full-chk').onchange = () => {
+      lastFullQuery = null; // 模式切换强制重跑
+      runSearch();
+    };
+  }
+  async function runSearch() {
     const q = $('search-input').value.trim();
-    const res = await fetchJSON(`/api/sessions?source=${state.source}&limit=300&q=${encodeURIComponent(q)}`);
-    const list = $('session-list'); list.innerHTML = '';
-    (res.sessions || []).forEach(s => list.appendChild(sessionItem(s)));
+    const full = $('search-full-chk') && $('search-full-chk').checked;
+    const note = $('search-results-note');
+    if (!q) {
+      note.style.display = 'none';
+      // 恢复原始列表(重新加载缓存态列表,不强制重扫)
+      await loadSessions(false);
+      return;
+    }
+    if (full) {
+      if (q === lastFullQuery) return;
+      lastFullQuery = q;
+      note.style.display = 'block';
+      note.textContent = `全文搜索「${q}」中…`;
+      const list = $('session-list'); list.innerHTML = '<div class="empty-state"><p>扫描会话正文…</p></div>';
+      try {
+        const res = await fetchJSON(`/api/search?source=${state.source}&q=${encodeURIComponent(q)}`);
+        const hits = res.results || [];
+        list.innerHTML = '';
+        hits.forEach(h => {
+          const s = state.lastSessions && state.lastSessions.find(x => x.id === h.sessionId);
+          list.appendChild(sessionItem(s || { id: h.sessionId, title: h.sessionId.slice(0, 8) + '…', project: '', time_created: 0 }, h.matches));
+        });
+        note.textContent = hits.length
+          ? `全文命中 ${hits.length} 个会话`
+          : `全文未命中(仅扫描最近 600 个会话文件)`;
+      } catch (e) {
+        list.innerHTML = `<div class="empty-state"><p>全文搜索失败: ${escapeHtml(e.message)}</p></div>`;
+        note.textContent = '';
+      }
+    } else {
+      note.style.display = 'none';
+      filterSessionsClient(q);
+    }
+  }
+  // 客户端元数据过滤:遍历已有 DOM 项,按 data 属性匹配
+  function filterSessionsClient(q) {
+    const q2 = q.toLowerCase();
+    const items = $('session-list').querySelectorAll('.session-item');
+    let shown = 0;
+    items.forEach(it => {
+      const hay = [it.dataset.title, it.dataset.id, it.dataset.filePath, it.dataset.project]
+        .filter(Boolean).join(' ').toLowerCase();
+      const vis = hay.includes(q2);
+      it.style.display = vis ? '' : 'none';
+      if (vis) shown++;
+    });
+    const note = $('search-results-note');
+    note.style.display = 'block';
+    note.textContent = shown === items.length ? '' : `元数据过滤: ${shown}/${items.length} 条`;
   }
 
   // ---------- 会话详情 ----------

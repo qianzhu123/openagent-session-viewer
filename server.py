@@ -171,11 +171,32 @@ class Handler(BaseHTTPRequestHandler):
                 refresh = "refresh" in q
                 if not a:
                     return _json(self, {"error": "unknown source"}, 400)
+                # q/project 是即时过滤条件:绕过列表缓存直查(缓存存的是未过滤全量,
+                # 读写都不能过缓存层,否则过滤结果会污染缓存/被旧缓存吞掉)。
+                if q.get("q", [""])[0] or q.get("project", [""])[0]:
+                    res = apply_meta(source, a.list_sessions(
+                        q=q.get("q", [""])[0], project=q.get("project", [""])[0],
+                        limit=int(q.get("limit", ["200"])[0]),
+                        offset=int(q.get("offset", ["0"])[0])))
+                    return _json(self, res)
                 res = cache_mod.sessions(source, lambda: apply_meta(source, a.list_sessions(
-                    q=q.get("q", [""])[0], project=q.get("project", [""])[0],
+                    q="", project="",
                     limit=int(q.get("limit", ["200"])[0]),
                     offset=int(q.get("offset", ["0"])[0]))), refresh=refresh)
                 return _json(self, res)
+            if path == "/api/search":
+                source = q.get("source", ["claude"])[0]
+                needle = q.get("q", [""])[0]
+                if not needle.strip():
+                    return _json(self, {"results": []})
+                from adapters import content_search
+                try:
+                    results = content_search.search(source, needle,
+                                                    limit=int(q.get("limit", ["50"])[0]))
+                except Exception as e:
+                    traceback.print_exc()
+                    return _json(self, {"error": str(e)}, 500)
+                return _json(self, {"results": results, "query": needle})
             if path == "/api/session":
                 source = q.get("source", ["claude"])[0]
                 sid = q.get("id", [""])[0]

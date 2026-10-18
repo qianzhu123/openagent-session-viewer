@@ -1,3 +1,4 @@
+import json
 import sys
 import tempfile
 import unittest
@@ -138,6 +139,41 @@ class RegressionTests(unittest.TestCase):
         self.assertIn("zcode", server.ADAPTERS)
         self.assertIn("zcode", server.READONLY_SOURCES)
         self.assertIn("zcode", server.CATALOG_BUILDERS)
+
+    def test_content_search_engine_finds_claude_text(self):
+        import tempfile, os
+        from adapters import content_search
+        with tempfile.TemporaryDirectory() as tmp:
+            p = os.path.join(tmp, "abc123.jsonl")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(json.dumps({"type": "user", "message": {"content": [
+                    {"type": "text", "text": "帮我修复 HomeArt 的登录 bug"}]}}) + "\n")
+                f.write(json.dumps({"type": "assistant", "message": {"content": [
+                    {"type": "text", "text": "好的,我来看看登录逻辑。"}]}}) + "\n")
+            res = content_search.search_jsonl_dir(tmp, content_search._extract_claude_texts, "HomeArt", 10)
+            self.assertEqual(len(res), 1)
+            self.assertEqual(res[0]["sessionId"], "abc123")
+            m = res[0]["matches"][0]
+            self.assertIn("HomeArt", m["snippet"])
+            self.assertEqual(
+                m["snippet"][m["hitStart"]:m["hitEnd"]], "HomeArt")
+            # 未命中关键词返回空
+            self.assertEqual(
+                content_search.search_jsonl_dir(tmp, content_search._extract_claude_texts, "不存在的词", 10), [])
+
+    def test_frontend_search_is_client_side_and_fulltext_ui_exists(self):
+        root = Path(__file__).resolve().parents[1]
+        js = (root / "static" / "app.js").read_text(encoding="utf-8")
+        html = (root / "static" / "index.html").read_text(encoding="utf-8")
+        # 元数据过滤走客户端 DOM(不再经服务端缓存吞 q)
+        self.assertIn("filterSessionsClient", js)
+        self.assertNotIn("/api/sessions?source=${state.source}&limit=300&q=", js)
+        # 全文搜索 UI + API 已接上
+        self.assertIn("search-full-chk", js)
+        self.assertIn("/api/search?source=", js)
+        self.assertIn('id="search-full-chk"', html)
+        # 会话列表存进 state 供全文结果复用标题
+        self.assertIn("state.lastSessions", js)
 
 
 if __name__ == "__main__":
