@@ -1,10 +1,11 @@
-"""本地索引(catalog)扫描:三家 source 各自取各自的索引数据。
+"""本地索引(catalog)扫描:各 source 各自取各自的索引数据。
 
 - claude: 扫 .mcp.json / ~/.claude/mcp.json / ~/.claude.json 的 mcpServers,
           扫 .claude/skills、.claude/agents、.claude/commands 目录(project+user 两层)。
 - codex:  从会话 JSONL 的 dynamic_tools 聚合 MCP/tools 命名空间 + 固定 codex 启动命令。
 - opencode: 读 ~/.config/opencode/opencode.jsonc 的 provider/models,
             再从 opencode.db 会话的 part 表聚合出现过的 tool 命名。
+- zcode:  从 ~/.zcode/cli/db/db.sqlite 只读聚合 model_usage 模型与 part 出现过的 tool 命名。
 
 前端按 source 切换展示。只读,不改原始配置。
 """
@@ -262,6 +263,48 @@ def build_opencode_catalog(project_root: str = ""):
                        "mcpServers": 0, "skills": 0, "agents": 0}}
 
 
+# ---------- ZCode ----------
+
+ZCODE_DB = HOME / ".zcode" / "cli" / "db" / "db.sqlite"
+
+
+def build_zcode_catalog(project_root: str = ""):
+    """ZCode: 从会话库只读聚合模型与出现过的工具名。"""
+    import sqlite3
+    models, tool_names = [], []
+    if ZCODE_DB.exists():
+        uri = f"file:{str(ZCODE_DB).replace(os.sep, '/')}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True)
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT model_id, COUNT(*) c FROM model_usage "
+                        "GROUP BY model_id ORDER BY c DESC")
+            models = [{"name": r[0], "id": r[0], "scope": "model_usage",
+                       "count": r[1]} for r in cur.fetchall() if r[0]]
+            if project_root:
+                cur.execute("SELECT DISTINCT json_extract(p.data,'$.tool') FROM part p "
+                            "JOIN session s ON p.session_id=s.id "
+                            "WHERE json_extract(p.data,'$.type')='tool' "
+                            "AND LOWER(s.directory)=LOWER(?)",
+                            (project_root.replace("/", "\\"),))
+            else:
+                cur.execute("SELECT DISTINCT json_extract(data,'$.tool') FROM part "
+                            "WHERE json_extract(data,'$.type')='tool'")
+            tool_names = sorted({r[0] for r in cur.fetchall() if r[0]})
+        finally:
+            conn.close()
+    tool_items = [{"name": n, "kind": "tool"} for n in tool_names]
+    commands = [
+        {"name": "zcode", "description": "启动新的 ZCode 桌面会话"},
+        {"name": "zcode --resume <session-id>", "description": "恢复指定会话(以客户端实际支持为准)"},
+    ]
+    return {"models": models, "tools": tool_items, "commands": commands,
+            "mcpServers": [], "skills": [], "agents": [],
+            "counts": {"models": len(models), "tools": len(tool_items),
+                       "commands": len(commands),
+                       "mcpServers": 0, "skills": 0, "agents": 0}}
+
+
 def build_catalog(source: str, project_root: str = "") -> dict:
     if source == "claude":
         c = build_claude_catalog(project_root)
@@ -272,6 +315,11 @@ def build_catalog(source: str, project_root: str = "") -> dict:
         c = build_codex_catalog(project_root)
         c["generatedAt"] = _now()
         c["source"] = "codex"
+        return c
+    if source == "zcode":
+        c = build_zcode_catalog(project_root)
+        c["generatedAt"] = _now()
+        c["source"] = "zcode"
         return c
     c = build_opencode_catalog(project_root)
     c["generatedAt"] = _now()

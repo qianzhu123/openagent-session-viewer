@@ -56,6 +56,89 @@ class RegressionTests(unittest.TestCase):
         self.assertIn("combo-input-list", js)
         self.assertIn("document.addEventListener('scroll', onDocumentScroll, true)", js)
 
+    def test_zcode_adapter_normalizes_sqlite_and_stays_readonly(self):
+        import json as _j
+        import sqlite3
+        from adapters.zcode import ZCodeAdapter
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "db.sqlite"
+            conn = sqlite3.connect(db)
+            conn.executescript("""
+                CREATE TABLE session (id text primary key, project_id text, directory text,
+                    title text, version text, task_type text default 'interactive',
+                    time_created integer, time_updated integer,
+                    title_source text default 'first_input');
+                CREATE TABLE message (id text primary key, session_id text,
+                    time_created integer, time_updated integer, data text, sequence integer);
+                CREATE TABLE part (id text primary key, message_id text, session_id text,
+                    time_created integer, time_updated integer, data text, sequence integer);
+                CREATE TABLE model_usage (id text primary key, session_id text, model_id text,
+                    input_tokens integer, output_tokens integer, reasoning_tokens integer,
+                    cache_read_input_tokens integer, cache_creation_input_tokens integer,
+                    status text, started_at integer, query_source text, provider_id text);
+            """)
+            conn.execute("INSERT INTO session VALUES "
+                         "('sess_t1','proj_x','C:\\tmp\\demo','标题T','0.16.5',"
+                         "'interactive',1000,2000,'first_input')")
+            long_out = "x" * 9000
+            msgs = [
+                ("m1", 100, {"role": "user", "cost": 0},
+                 [("p1", 10, {"type": "text", "text": "你好"})]),
+                ("m2", 200, {"role": "assistant", "cost": 0},
+                 [("p2", 20, {"type": "reasoning", "text": "想一下"}),
+                  ("p3", 21, {"type": "tool", "tool": "Bash", "callID": "call_1",
+                              "state": {"status": "completed", "input": {},
+                                        "output": long_out}}),
+                  ("p4", 22, {"type": "step-start"}),
+                  ("p5", 23, {"type": "step-finish", "tokens": {}})]),
+                ("m3", 300, {"role": "assistant", "error": {"name": "RateLimit"}},
+                 [("p6", 30, {"type": "step-start"})]),
+            ]
+            for mid, ts, data, parts in msgs:
+                conn.execute("INSERT INTO message VALUES (?,?,?,?,?,?)",
+                             (mid, "sess_t1", ts, ts, _j.dumps(data), ts))
+                for pid, pts, pdata in parts:
+                    conn.execute("INSERT INTO part VALUES (?,?,?,?,?,?,?)",
+                                 (pid, mid, "sess_t1", pts, pts, _j.dumps(pdata), pts))
+            conn.execute("INSERT INTO model_usage VALUES "
+                         "('u1','sess_t1','GLM-Test',100,50,5,10,2,"
+                         "'completed',0,'chat','p')")
+            conn.commit()
+            conn.close()
+
+            a = ZCodeAdapter(db_path=str(db), rollout_dir=str(Path(tmp) / "none"))
+            res = a.list_sessions()
+            self.assertEqual(res["total"], 1)
+            s = res["sessions"][0]
+            self.assertEqual(s["title"], "标题T")
+            self.assertEqual(s["project"], "C:\\tmp\\demo")
+            self.assertEqual(s["model"], "GLM-Test")
+            self.assertEqual(s["message_count"], 3)
+            self.assertEqual(s["tokens"]["input"], 100)
+
+            d = a.get_session("sess_t1")
+            roles = [m["role"] for m in d["messages"]]
+            self.assertEqual(roles, ["user", "assistant"])  # 错误占位消息被剔除
+            parts2 = d["messages"][1]["parts"]
+            self.assertEqual([p["type"] for p in parts2], ["reasoning", "tool"])  # step-* 不进时间线
+            self.assertEqual(parts2[1]["tool"], "Bash")
+            self.assertEqual(parts2[1]["call_id"], "call_1")
+            self.assertLessEqual(len(parts2[1]["state"]["output"]), 8100)  # 超长输出被截断
+
+            raw = a.get_raw("sess_t1").decode("utf-8")
+            self.assertIn('"role": "user"', raw)
+
+            self.assertFalse(a.delete_session_rows("sess_t1"))  # 永不删除
+            ro = a._conn()  # 只读连接:写入必须被 SQLite 拒绝
+            with self.assertRaises(sqlite3.Error):
+                ro.execute("DELETE FROM session")
+            ro.close()
+
+    def test_zcode_is_registered_readonly_source(self):
+        self.assertIn("zcode", server.ADAPTERS)
+        self.assertIn("zcode", server.READONLY_SOURCES)
+        self.assertIn("zcode", server.CATALOG_BUILDERS)
+
 
 if __name__ == "__main__":
     unittest.main()

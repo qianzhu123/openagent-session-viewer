@@ -29,11 +29,22 @@ body{font-family:var(--sans);color:var(--ink);font-size:16px;line-height:1.55}
 .nav-left{display:flex;align-items:center;gap:8px}
 .spike-mark{color:var(--ink);font-size:18px;line-height:1}
 .brand-wordmark{font-size:20px;font-weight:500}
-.nav-mid.source-tabs{display:flex;gap:4px;justify-self:center}
+.nav-mid.source-tabs{display:flex;gap:4px;justify-self:center;position:relative}
 .source-tab{background:transparent;border:1px solid transparent;color:var(--muted);
   font-family:var(--sans);font-size:14px;font-weight:500;padding:8px 14px;border-radius:var(--r-md);cursor:pointer;min-width:88px;transition:none}
 .source-tab:hover{color:var(--ink)}
 .source-tab.active{background:var(--surface-card);color:var(--ink)}
+/* 智能体显示选择按钮 + 弹层 */
+.source-tab-picker{background:transparent;border:1px solid transparent;color:var(--muted);
+  font-size:14px;padding:8px 10px;border-radius:var(--r-md);cursor:pointer;line-height:1}
+.source-tab-picker:hover{color:var(--ink);background:var(--surface-soft)}
+.source-picker-popover{position:absolute;z-index:150;top:calc(100% + 6px);left:50%;transform:translateX(-50%);
+  background:var(--canvas);border:1px solid var(--hairline);border-radius:var(--r-md);
+  box-shadow:0 8px 24px rgba(20,20,19,0.18);padding:8px;min-width:150px}
+.source-pick-item{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink);
+  padding:7px 10px;border-radius:var(--r-sm);cursor:pointer}
+.source-pick-item:hover{background:var(--surface-soft)}
+.source-pick-item input{cursor:pointer}
 .nav-right{justify-self:end;display:flex;align-items:center;gap:8px;min-height:40px}
 .resume-bar{display:none}
 .resume-bar.show{display:flex}
@@ -171,6 +182,9 @@ body{font-family:var(--sans);color:var(--ink);font-size:16px;line-height:1.55}
   margin-top:-24px;margin-left:-32px;margin-right:-32px;padding-left:32px;padding-right:32px;padding-top:24px;
   border-bottom:1px solid var(--hairline-soft)}
 .back-home-btn{flex:0 0 auto}
+.reasoning-toggle{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);
+  cursor:pointer;user-select:none;flex:0 0 auto;padding-top:9px}
+.reasoning-toggle input{cursor:pointer}
 .conv-info{flex:1 1 auto;min-width:0}
 .conversation-title{font-size:28px;font-weight:500;letter-spacing:-0.3px;margin-bottom:8px;word-break:break-word}
 .conversation-meta{display:flex;gap:8px;flex-wrap:wrap}

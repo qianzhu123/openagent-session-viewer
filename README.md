@@ -1,10 +1,11 @@
 # OpenAgent Session Viewer
 
-A local web interface to uniformly browse the on-disk session records of three agentic CLIs:
+A local web interface to uniformly browse the on-disk session records of four agentic CLIs:
 
 - **Claude Code** — `~/.claude/projects/**\*.jsonl`
 - **Codex** — `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
 - **OpenCode** — `~/.local/share/opencode/opencode.db` (SQLite)
+- **ZCode** — `~/.zcode/cli/db/db.sqlite` (SQLite, **read-only source**: never modified or deleted)
 
 ## Design Goals
 
@@ -21,7 +22,7 @@ python server.py --open
 
 ## Relationship to the Other Two Viewers
 
-This project is designed to live alongside `claude-session-viewer` and `codex-session-viewer` but **runs independently** and does not depend on them. Backend parsing logic is split into 3 adapters (see below); the Codex adapter's cleaning rules reference `codex-session-viewer`.
+This project is designed to live alongside `claude-session-viewer` and `codex-session-viewer` but **runs independently** and does not depend on them. Backend parsing logic is split into 4 adapters (see below); the Codex adapter's cleaning rules reference `codex-session-viewer`.
 
 ## Directory Structure
 
@@ -34,6 +35,7 @@ openagent-session-viewer/
     claude.py            Scans .claude/projects JSONL
     codex.py             Scans .codex/sessions JSONL
     opencode.py          Reads opencode.db SQLite
+    zcode.py             Reads ~/.zcode/cli/db/db.sqlite (strictly read-only)
   static/                Browser UI
     index.html
     app.js
@@ -46,13 +48,18 @@ openagent-session-viewer/
     smoke_test.py
 ```
 
-## Comparison of the Three Sources
+## Comparison of the Four Sources
 
 | Source | Path | Format | Title Source |
 |---|---|---|---|
 | Claude | `.claude/projects/<encoded-path>/*.jsonl` | JSONL | First user message / summary |
 | Codex | `.codex/sessions/**/rollout-*.jsonl` | JSONL | `session_index.jsonl` / session_meta |
 | OpenCode | `.local/share/opencode/opencode.db` | SQLite | `session.title` |
+| ZCode | `.zcode/cli/db/db.sqlite` | SQLite | `session.title` |
+
+ZCode is a **read-only source**: the DB is opened with `mode=ro` (never writes, never
+creates WAL files), and the delete endpoints (soft/hard) return 403 for it. Title
+aliases still work — they are stored in the viewer's own `data/session_meta.json`.
 
 ## UI & Interaction
 

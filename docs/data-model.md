@@ -48,15 +48,28 @@ All three adapters normalize their raw data into the structure below. The fronte
 
 ## Normalization Mapping Across the Three Sources
 
-| Field | Claude | Codex | OpenCode |
-|---|---|---|---|
-| id | file name uuid | session-id from rollout file name | `session.id` |
-| project | decoded file path (`-` → `\`/`/`) | `session_meta.cwd` | `session.directory` |
-| title | first user message or summary | session_index title | `session.title` |
-| model | model within event | session_meta model | extract modelID from `session.model` JSON |
-| messages | JSONL lines grouped by role | dedup turn/user_message/agent_message | `message` JOIN `part` |
-| parts | tool_use / tool_result → tool | function_call / call → tool | `part.type` direct mapping |
-| tokens | event usage | token_count rows | aggregate `step-finish.tokens` |
+| Field | Claude | Codex | OpenCode | ZCode |
+|---|---|---|---|---|
+| id | file name uuid | session-id from rollout file name | `session.id` | `session.id` (`sess_*`) |
+| project | decoded file path (`-` → `\`/`/`) | `session_meta.cwd` | `session.directory` | `session.directory` |
+| title | first user message or summary | session_index title | `session.title` | `session.title` |
+| model | model within event | session_meta model | extract modelID from `session.model` JSON | top `model_id` by usage from `model_usage` |
+| agent | — | — | `session.agent` | `session.task_type` (`interactive` / `subagent_child`) |
+| messages | JSONL lines grouped by role | dedup turn/user_message/agent_message | `message` JOIN `part` | `message` JOIN `part` |
+| parts | tool_use / tool_result → tool | function_call / call → tool | `part.type` direct mapping | `part.type` direct mapping (`step-*`/`timeline` skipped) |
+| tokens | event usage | token_count rows | aggregate `step-finish.tokens` | aggregate `model_usage` per session |
+
+### ZCode specifics
+
+- Source DB: `~/.zcode/cli/db/db.sqlite`, opened **read-only** (`mode=ro`, fallback
+  `immutable`); the viewer never writes to it and delete endpoints reject `zcode` with 403.
+- `part.data.type` in {`text`, `reasoning`, `tool`, `step-start`, `step-finish`, `timeline`};
+  the last three never enter the timeline. Assistant placeholder messages that carry only
+  a `step-start` part (e.g. rate-limit errors) are dropped entirely.
+- `tool` parts: `state` passes through as-is (`pending/running/completed/error`); a string
+  `state.output` is truncated to 8 KB (full data via `/api/raw`).
+- `get_raw` prefers the original `~/.zcode/cli/rollout/model-io-<session-id>.jsonl` when
+  present, otherwise exports the raw `message.data` rows as JSONL.
 
 ## Adapter Base Class Contract
 

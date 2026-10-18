@@ -10,6 +10,16 @@ from .base import BaseAdapter, Session, Message, Part
 
 PROJ_DIR = os.path.expanduser("~/.claude/projects")
 
+# 用户消息中的本地命令噪声(isMeta 消息 / 斜杠命令回显等),不进时间线
+USER_NOISE_PREFIXES = ("<local-command-caveat>", "<command-name>",
+                       "<command-message>", "<command-args>",
+                       "<local-command-stdout>", "<bash-stdout>",
+                       "<bash-stderr>", "[Request interrupted by user")
+
+
+def _is_user_noise(text: str) -> bool:
+    return any((text or "").lstrip().startswith(p) for p in USER_NOISE_PREFIXES)
+
 
 def _decode_project(path_or_dir: str) -> str:
     # Claude encodes the cwd into the folder name, e.g. an encoded segment like
@@ -37,6 +47,18 @@ def _to_ms(ts) -> int:
         return int(calendar.timegm(datetime.datetime.fromisoformat(z).timetuple()) * 1000)
     except Exception:
         return 0
+
+
+# developer role 的内置指令消息(prefix),不进时间线
+# 用户消息中的本地命令噪声(isMeta 消息 / 斜杠命令回显),不进时间线
+USER_NOISE_PREFIXES = ("<local-command-caveat>", "<command-name>",
+                       "<command-message>", "<command-args>",
+                       "<local-command-stdout>", "<bash-stdout>",
+                       "<bash-stderr>", "[Request interrupted by user")
+
+
+def _is_user_noise(text: str) -> bool:
+    return any((text or "").lstrip().startswith(p) for p in USER_NOISE_PREFIXES)
 
 
 class ClaudeAdapter(BaseAdapter):
@@ -124,21 +146,30 @@ class ClaudeAdapter(BaseAdapter):
                 role = ev.get("type")
                 if role not in ("user", "assistant"):
                     continue
+                # isMeta 消息(local-command-caveat 等)是 CLI 本地注入,不进时间线
+                if ev.get("isMeta"):
+                    continue
                 msg = ev.get("message", {})
                 cur = Message(role=role, time=_to_ms(ev.get("timestamp", 0)))
                 content = msg.get("content", [])
                 # message.content 可能是 list(正常),也可能是 str(纯文本 user 消息)。
                 # 顶层是 str 时整体作一条 text,不能逐字符迭代,否则会拆成单字符 parts。
                 if isinstance(content, str):
+                    if _is_user_noise(content):
+                        continue
                     cur.parts.append(Part(type="text", text=content).__dict__)
                 else:
                     for c in content:
                         if isinstance(c, str):
-                            cur.parts.append(Part(type="text", text=c).__dict__)
+                            if not _is_user_noise(c):
+                                cur.parts.append(Part(type="text", text=c).__dict__)
                         elif isinstance(c, dict):
                             ct = c.get("type")
                             if ct == "text":
-                                cur.parts.append(Part(type="text", text=c.get("text", "")).__dict__)
+                                tx = c.get("text", "") or ""
+                                if _is_user_noise(tx):
+                                    continue
+                                cur.parts.append(Part(type="text", text=tx).__dict__)
                             elif ct == "thinking":
                                 cur.parts.append(Part(type="reasoning", text=c.get("thinking", "")).__dict__)
                             elif ct == "tool_use":

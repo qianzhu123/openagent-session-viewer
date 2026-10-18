@@ -11,7 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from adapters.claude import ClaudeAdapter
 from adapters.codex import CodexAdapter
 from adapters.opencode import OpenCodeAdapter
-from adapters.catalog import build_claude_catalog, build_codex_catalog, build_opencode_catalog
+from adapters.zcode import ZCodeAdapter
+from adapters.catalog import (build_claude_catalog, build_codex_catalog,
+                              build_opencode_catalog, build_zcode_catalog)
 from adapters import cache as cache_mod
 from adapters import session_meta as meta
 
@@ -19,12 +21,17 @@ ADAPTERS = {
     "claude": ClaudeAdapter(),
     "codex": CodexAdapter(),
     "opencode": OpenCodeAdapter(),
+    "zcode": ZCodeAdapter(),
 }
 CATALOG_BUILDERS = {
     "claude": build_claude_catalog,
     "codex": build_codex_catalog,
     "opencode": build_opencode_catalog,
+    "zcode": build_zcode_catalog,
 }
+# 只读源:数据文件不允许被本工具增删改(zcode 会话在 ZCode 客户端自有库中)。
+# 标题别名等仍走 session_meta.json,不触碰源数据。
+READONLY_SOURCES = {"zcode"}
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 HOST = "127.0.0.1"
@@ -233,6 +240,9 @@ class Handler(BaseHTTPRequestHandler):
             body = self._read_body()
             source = (body.get("source") or "").strip()
             sid = (body.get("sessionId") or body.get("id") or "").strip()
+            if path in ("/api/sessions/delete", "/api/sessions/delete-local") \
+                    and source in READONLY_SOURCES:
+                return _json(self, {"error": f"{source} 源为只读,不允许删除会话"}, 403)
             a = ADAPTERS.get(source)
             if path == "/api/sessions/meta":
                 if not source or not sid:

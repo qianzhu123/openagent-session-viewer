@@ -43,12 +43,18 @@
         { key: 'cwd', label: '工作目录', type: 'text', wide: true },
         { key: 'prompt', label: '启动提示词', type: 'textarea', wide: true },
       ] },
+    zcode: { bin: 'zcode',
+      fields: [
+        { key: 'cwd', label: '工作目录', type: 'text', wide: true },
+        { key: 'prompt', label: '启动提示词', type: 'textarea', wide: true },
+      ] },
   };
 
   const CATALOG_KINDS = {
     claude: [['mcpServers', 'MCP', 'MCP Servers'], ['agents', 'Agents', '子智能体'], ['commands', 'Commands', '斜杠命令'], ['skills', 'Skills', 'Skills']],
     codex: [['mcpServers', 'MCP', 'MCP Servers'], ['tools', 'Tools', '工具命名空间'], ['commands', 'Commands', '启动命令']],
     opencode: [['models', 'Models', '模型'], ['tools', 'Tools', '会话工具'], ['commands', 'Commands', '启动命令']],
+    zcode: [['models', 'Models', '模型'], ['tools', 'Tools', '会话工具'], ['commands', 'Commands', '启动命令']],
   };
 
   const DEFAULT_PROJECT = 'C:\\Users\\Light';
@@ -183,6 +189,65 @@
     document.querySelectorAll('.source-tab').forEach(b =>
       b.classList.toggle('active', b.dataset.source === state.source));
   }
+
+  // ---------- 顶部智能体显示选择(多选:勾上的显示,其余隐藏) ----------
+  const ALL_SOURCES = ['claude', 'codex', 'opencode', 'zcode'];
+  const SOURCE_LABELS = { claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', zcode: 'ZCode' };
+  const SRC_VIS_LS = 'openagent_visible_sources';
+
+  function visibleSources() {
+    const saved = lsGet(SRC_VIS_LS, null);
+    // 无记录=全显;空数组防呆回退全显
+    if (!Array.isArray(saved) || !saved.length) return ALL_SOURCES.slice();
+    return ALL_SOURCES.filter(s => saved.includes(s));
+  }
+  function applySourceVisibility() {
+    const vis = visibleSources();
+    document.querySelectorAll('.source-tab').forEach(b => {
+      b.style.display = vis.includes(b.dataset.source) ? '' : 'none';
+    });
+    // 当前源被取消显示时退回首个可见源
+    if (!vis.includes(state.source)) {
+      state.source = vis[0] || 'claude';
+      onSourceChange();
+    }
+  }
+  function renderSourcePicker() {
+    const pop = $('source-picker-popover');
+    const vis = visibleSources();
+    pop.innerHTML = '';
+    ALL_SOURCES.forEach(s => {
+      const lbl = el('label', 'source-pick-item');
+      const chk = el('input'); chk.type = 'checkbox'; chk.checked = vis.includes(s);
+      chk.addEventListener('change', () => {
+        let cur = visibleSources().filter(x => x !== s);
+        if (chk.checked) cur = ALL_SOURCES.filter(x => cur.includes(x) || x === s);
+        if (!cur.length) { chk.checked = true; toast('至少保留一个智能体'); return; }
+        lsSet(SRC_VIS_LS, cur);
+        applySourceVisibility();
+      });
+      const span = el('span'); span.textContent = SOURCE_LABELS[s];
+      lbl.appendChild(chk); lbl.appendChild(span);
+      pop.appendChild(lbl);
+    });
+  }
+  function toggleSourcePicker() {
+    const pop = $('source-picker-popover');
+    const open = pop.style.display !== 'none';
+    if (open) { pop.style.display = 'none'; return; }
+    renderSourcePicker();
+    pop.style.display = 'block';
+    setTimeout(() => {
+      document.addEventListener('pointerdown', function onAway(ev) {
+        if (!pop.contains(ev.target) && ev.target.id !== 'source-tab-picker') {
+          pop.style.display = 'none';
+          document.removeEventListener('pointerdown', onAway);
+        }
+      });
+    }, 0);
+  }
+  $('source-tab-picker').onclick = (ev) => { ev.stopPropagation(); toggleSourcePicker(); };
+
   document.querySelectorAll('.source-tab').forEach(btn => {
     btn.onclick = () => {
       if (state.source === btn.dataset.source) return;
@@ -232,20 +297,34 @@
   function updateHero() {
     const map = { claude: ['Claude', 'Local Claude Code sessions, reads from ~/.claude/projects.'],
                    codex: ['Codex', 'Codex CLI sessions, reads from ~/.codex/sessions.'],
-                   opencode: ['OpenCode', 'OpenCode sessions, reads from the local opencode.db.'] };
+                   opencode: ['OpenCode', 'OpenCode sessions, reads from the local opencode.db.'],
+                   zcode: ['ZCode', 'ZCode desktop sessions, read-only from ~/.zcode/cli.'] };
     $('hero-title').textContent = map[state.source][0];
     $('hero-desc').textContent = map[state.source][1];
   }
 
   // ---------- 恢复命令(顶部常驻) ----------
+  const RESUME_BYPASS_FLAG = { claude: '--dangerously-skip-permissions',
+                               codex: '--dangerously-bypass-approvals-and-sandbox',
+                               opencode: '--auto' };
+  if ($('resume-bypass-chk')) {
+    $('resume-bypass-chk').checked = lsGet('openagent_resume_bypass', false);
+    $('resume-bypass-chk').onchange = () => {
+      lsSet('openagent_resume_bypass', $('resume-bypass-chk').checked);
+      buildResumeCmd();
+    };
+  }
   function buildResumeCmd() {
     const bar = $('resume-bar');
-    if (state.currentSessionId) {
+    if (state.currentSessionId && state.source !== 'zcode') {
+      // zcode 为桌面客户端,无终端 resume 命令,不显示恢复条
       bar.classList.add('show');
       let cmd;
       if (state.source === 'claude') cmd = `claude -r ${state.currentSessionId}`;
       else if (state.source === 'codex') cmd = `codex resume ${state.currentSessionId}`;
       else cmd = `opencode --session ${state.currentSessionId}`;
+      // 第二参数:跳过权限确认(各 CLI 参数已核对 --help)
+      if ($('resume-bypass-chk') && $('resume-bypass-chk').checked) cmd += ' ' + RESUME_BYPASS_FLAG[state.source];
       $('resume-cmd').textContent = cmd;
     } else {
       bar.classList.remove('show');
@@ -274,6 +353,8 @@
       else if (fv.model) parts.push('--model', fv.model);
       if (fv.sandbox) parts.push('--sandbox', fv.sandbox);
       if (fv.approval) parts.push('--ask-for-approval', fv.approval);
+      if (fv.prompt) parts.push(quoteArg(fv.prompt));
+    } else if (state.source === 'zcode') {
       if (fv.prompt) parts.push(quoteArg(fv.prompt));
     } else {
       const sub = fv.subcmd || 'tui';
@@ -428,6 +509,10 @@
 
   function openCtxMenu(ev, session) {
     ctxTarget = session;
+    // 只读源不提供删除入口(数据文件不允许被本工具改动)
+    const readonly = state.source === 'zcode';
+    $('ctx-soft-del').style.display = readonly ? 'none' : '';
+    $('ctx-local-del').style.display = readonly ? 'none' : '';
     ctxMenu.style.display = 'block';
 
     // 先让浏览器计算菜单实际尺寸
@@ -625,6 +710,25 @@
   }
   $('back-home-btn').onclick = () => showHome();
 
+  // 思考内容默认隐藏,勾选"思考"开关后显示
+  let showReasoning = false;
+  if ($('show-reasoning-chk')) {
+    showReasoning = lsGet('openagent_show_reasoning', false);
+    $('show-reasoning-chk').checked = showReasoning;
+    $('show-reasoning-chk').onchange = () => {
+      showReasoning = $('show-reasoning-chk').checked;
+      lsSet('openagent_show_reasoning', showReasoning);
+      if (state.currentSessionId && state.source) renderCurrentAgain();
+    };
+  }
+  // 开关变化后重渲染当前会话(不重新拉数据也可以,简单起见重新 fetch)
+  async function renderCurrentAgain() {
+    try {
+      const data = await fetchJSON(`/api/session?source=${state.source}&id=${state.currentSessionId}`);
+      renderMessages(data.messages || []);
+    } catch (e) { /* 忽略重渲染失败 */ }
+  }
+
   function renderMessages(messages) {
     const cont = $('messages-container'); cont.innerHTML = '';
     // task3: only show dialog text + reasoning, skip tool_use/tool_result parts.
@@ -640,7 +744,9 @@
           if (t.length === 1) { buf += t; }
           else { flushBuf(); blocks.push({kind:'text', text:t}); }
         } else if (p.type === 'reasoning') {
-          flushBuf(); blocks.push({kind:'reasoning', text:p.text || ''});
+          // 默认舍弃思考内容,勾选"思考"开关后显示
+          flushBuf();
+          if (showReasoning) blocks.push({kind:'reasoning', text:p.text || ''});
         }
       });
       flushBuf();
@@ -661,7 +767,7 @@ function safeJson(v) { try { return typeof v === 'string' ? v : JSON.stringify(v
 
   // ---------- 本地索引 ----------
   async function loadCatalog(refresh = false) {
-    $('catalog-title').textContent = { claude: 'Claude 本地索引', codex: 'Codex 本地索引', opencode: 'OpenCode 本地索引' }[state.source];
+    $('catalog-title').textContent = { claude: 'Claude 本地索引', codex: 'Codex 本地索引', opencode: 'OpenCode 本地索引', zcode: 'ZCode 本地索引' }[state.source];
     if (!state.projectRoot) state.projectRoot = $('project-root-select').value || DEFAULT_PROJECT;
     const disp = $('catalog-display');
     disp.innerHTML = '<div class="empty-state"><p>加载本地索引…</p></div>';
@@ -741,6 +847,8 @@ function safeJson(v) { try { return typeof v === 'string' ? v : JSON.stringify(v
                   { key: 'auto', label: '权限 --auto(自动批准)', type: 'select',
                     options: [['', '手动确认'], ['auto', 'auto 全自动(危险)']] },
                 ] },
+    zcode: { base: 'OPENAI_BASE_URL', key: 'OPENAI_API_KEY', bin: 'zcode',
+             modelFlag: '-m', needsPrompt: true, modelIsPositional: false, params: [] },
   };
   const API_LS = { bases: 'openagent_api_bases', models: s => `openagent_api_models_${s}` };
   function lsGet(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }
@@ -994,6 +1102,7 @@ function safeJson(v) { try { return typeof v === 'string' ? v : JSON.stringify(v
 
   // ---------- init ----------
   setStateFromURL();
+  applySourceVisibility();  // 先按已保存选择隐藏不需要的智能体 tab,可能触发 onSourceChange 换源
   setActiveSourceTab();
   updateHero();
   renderCmdBuilder(true);

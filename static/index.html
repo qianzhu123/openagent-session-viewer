@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/style.css?v=20260717f">
+    <link rel="stylesheet" href="/style.css?v=20260928a">
 </head>
 <body class="canvas">
     <!-- Top Nav:固定布局,常驻恢复指令 -->
@@ -21,8 +21,12 @@
             <button class="source-tab active" data-source="claude" type="button">Claude</button>
             <button class="source-tab" data-source="codex" type="button">Codex</button>
             <button class="source-tab" data-source="opencode" type="button">OpenCode</button>
+            <button class="source-tab" data-source="zcode" type="button">ZCode</button>
+            <button class="source-tab-picker" id="source-tab-picker" title="选择显示哪些智能体" type="button">⋯</button>
+            <div class="source-picker-popover" id="source-picker-popover" style="display:none;"></div>
         </div>
         <div class="nav-right resume-bar" id="resume-bar">
+            <label class="reasoning-toggle" title="恢复命令追加跳过权限确认参数(危险)"><input type="checkbox" id="resume-bypass-chk">跳过权限</label>
             <code id="resume-cmd" class="resume-code">claude -r <session-id></code>
             <button class="btn-icon-circular" id="copy-resume-btn" title="复制恢复命令" type="button">⧉</button>
         </div>
@@ -59,8 +63,8 @@
                 <div class="hero-band">
                     <div class="hero-copy">
                         <span class="eyebrow caption-uppercase">OpenAgent Session Workbench</span>
-                        <h1 class="serif hero-title" id="hero-title">Claude · Codex · OpenCode</h1>
-                        <p class="hero-desc body-md" id="hero-desc">统一浏览三家智能体的本地会话。左侧选会话,顶部复制恢复命令。</p>
+                        <h1 class="serif hero-title" id="hero-title">Claude · Codex · OpenCode · ZCode</h1>
+                        <p class="hero-desc body-md" id="hero-desc">统一浏览各智能体的本地会话。左侧选会话,顶部复制恢复命令。</p>
                     </div>
                     <!-- 启动命令生成器:随 source 切换 -->
                     <div class="code-window-card">
@@ -117,6 +121,7 @@
             <div class="conversation-view" id="conversation-view" style="display:none;">
                 <div class="conversation-header">
                     <button class="btn-secondary back-home-btn" id="back-home-btn" type="button">← 返回</button>
+                    <label class="reasoning-toggle" title="显示/隐藏智能体思考内容"><input type="checkbox" id="show-reasoning-chk">思考</label>
                     <div class="conv-info">
                         <h1 class="serif conversation-title" id="conversation-title">会话标题</h1>
                         <div class="conversation-meta">
@@ -143,6 +148,6 @@
         <button class="ctx-item ctx-danger" id="ctx-local-del" type="button">🗑 移至回收站</button>
     </div>
 
-    <script src="/app.js?v=20260717n"></script>
+    <script src="/app.js?v=20260928a"></script>
 </body>
 </html>
