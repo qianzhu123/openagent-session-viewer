@@ -82,6 +82,19 @@ body{font-family:var(--sans);color:var(--ink);font-size:16px;line-height:1.55}
 .search-full-toggle{display:flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap;user-select:none}
 .search-full-toggle input{cursor:pointer}
 .search-full-toggle:hover{color:var(--ink)}
+/* 全文关键词正文高亮 + 跳转导航条 */
+.kw-nav-bar{position:sticky;top:8px;z-index:60;align-self:flex-start;display:flex;align-items:center;gap:6px;
+  background:var(--surface-card);border:1px solid var(--hairline);border-radius:999px;padding:4px 10px;
+  box-shadow:0 4px 14px rgba(20,20,19,0.14);margin:0 auto 8px;width:max-content}
+.kw-nav-count{font-size:12.5px;color:var(--muted);min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
+.kw-nav-btn{background:var(--surface-soft);border:1px solid var(--hairline);border-radius:50%;
+  width:24px;height:24px;line-height:1;font-size:13px;cursor:pointer;color:var(--ink);display:flex;align-items:center;justify-content:center;padding:0}
+.kw-nav-btn:hover{background:var(--surface-card)}
+.kw-nav-close{border-radius:50%}
+.conversation-view{position:relative}
+mark.kw{background:#f5e6b8;color:var(--ink);border-radius:2px;padding:0 1px}
+mark.kw.kw-current{background:#f0a24b;color:#fff;outline:2px solid #f0a24b;border-radius:2px}
+
 /* 全文搜索结果区(替换会话列表渲染命中卡片) */
 .si-hits{font-size:12px;color:var(--muted);margin-top:4px}
 .si-hits .hit-snippet{display:block;color:var(--ink);opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}

@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/style.css?v=20261018a">
+    <link rel="stylesheet" href="/style.css?v=20261019b">
 </head>
 <body class="canvas">
     <!-- Top Nav:固定布局,常驻恢复指令 -->
@@ -125,6 +125,12 @@
             </div>
 
             <div class="conversation-view" id="conversation-view" style="display:none;">
+                <div class="kw-nav-bar" id="kw-nav-bar" style="display:none;">
+                    <span class="kw-nav-count" id="kw-nav-count">0</span>
+                    <button class="kw-nav-btn" id="kw-prev-btn" type="button" title="上一个 (Shift+Enter)">↑</button>
+                    <button class="kw-nav-btn" id="kw-next-btn" type="button" title="下一个 (Enter)">↓</button>
+                    <button class="kw-nav-btn kw-nav-close" id="kw-close-btn" type="button" title="关闭高亮">×</button>
+                </div>
                 <div class="conversation-header">
                     <button class="btn-secondary back-home-btn" id="back-home-btn" type="button">← 返回</button>
                     <label class="reasoning-toggle" title="显示/隐藏智能体思考内容"><input type="checkbox" id="show-reasoning-chk">思考</label>
@@ -154,6 +160,6 @@
         <button class="ctx-item ctx-danger" id="ctx-local-del" type="button">🗑 移至回收站</button>
     </div>
 
-    <script src="/app.js?v=20261019a"></script>
+    <script src="/app.js?v=20261019b"></script>
 </body>
 </html>

@@ -291,6 +291,8 @@
   }
   function showHome() {
     state.currentSessionId = '';
+    state.fulltextKeyword = '';  // 离开会话清掉正文关键词高亮/导航
+    hideKwNav();
     buildResumeCmd();
     highlightActive();
     pushURL();
@@ -703,6 +705,7 @@
       lastFullQuery = q;
       note.style.display = 'block';
       note.textContent = `全文搜索「${q}」中…`;
+      state.fulltextKeyword = q;  // 进会话时正文高亮 + 跳转导航用
       const list = $('session-list'); list.innerHTML = '<div class="empty-state"><p>扫描会话正文…</p></div>';
       try {
         const res = await fetchJSON(`/api/search?source=${state.source}&q=${encodeURIComponent(q)}`);
@@ -816,6 +819,8 @@
     // task3: only show dialog text + reasoning, skip tool_use/tool_result parts.
     // task1 guard: merge consecutive single-char text parts (legacy backend split each char
     // into its own part, each rendering as one-char-per-line vertically).
+    const kw = state.fulltextKeyword || '';
+    const marks = [];   // 全文模式下收集所有关键词 <mark>,供"跳下一个"定位
     messages.forEach(m => {
       const blocks = [];
       let buf = '';
@@ -838,10 +843,65 @@
       const role = el('div', 'm-role'); role.textContent = m.role; div.appendChild(role);
       blocks.forEach(b => {
         const x = el('div', b.kind === 'reasoning' ? 'part-reasoning' : 'part-text');
-        x.textContent = b.text;
+        // 全文搜索进入:关键词高亮(textContent 逐段拆,不经 innerHTML,防注入)
+        if (kw && b.kind === 'text' && b.text.includes(kw)) {
+          b.text.split(kw).forEach((seg, i, arr) => {
+            if (i) { const mk = el('mark', 'kw'); mk.textContent = kw; x.appendChild(mk); marks.push(mk); }
+            if (seg) x.appendChild(document.createTextNode(seg));
+          });
+        } else {
+          x.textContent = b.text;
+        }
         div.appendChild(x);
       });
       cont.appendChild(div);
+    });
+    setupKwNav(marks);
+  }
+
+  // ---------- 全文关键词跳转导航 ----------
+  let kwNavState = { idx: -1, marks: [] };
+  function setupKwNav(marks) {
+    kwNavState = { idx: -1, marks };
+    const bar = $('kw-nav-bar');
+    if (!bar) return;
+    if (!marks.length) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    updateKwNavCount();
+    jumpToMark(0, false);  // 进会话先跳到第一处(不滚动顶部)
+  }
+  function updateKwNavCount() {
+    const bar = $('kw-nav-bar');
+    const n = kwNavState.marks.length;
+    bar.querySelector('#kw-nav-count').textContent = n ? `${kwNavState.idx + 1}/${n}` : '0';
+  }
+  function jumpToMark(i, scroll = true) {
+    const n = kwNavState.marks.length;
+    if (!n) return;
+    kwNavState.idx = ((i % n) + n) % n;
+    const mk = kwNavState.marks[kwNavState.idx];
+    kwNavState.marks.forEach(m => m.classList.remove('kw-current'));
+    mk.classList.add('kw-current');
+    updateKwNavCount();
+    if (scroll) mk.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function hideKwNav() {
+    const bar = $('kw-nav-bar');
+    if (bar) bar.style.display = 'none';
+    kwNavState = { idx: -1, marks: [] };
+  }
+  if ($('kw-next-btn')) {
+    $('kw-next-btn').onclick = () => jumpToMark(kwNavState.idx + 1);
+    $('kw-prev-btn').onclick = () => jumpToMark(kwNavState.idx - 1);
+    $('kw-close-btn').onclick = hideKwNav;
+    // Enter=下一个, Shift+Enter=上一个(仅会话视图且导航条可见时)
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' || $('conversation-view').style.display === 'none') return;
+      const bar = $('kw-nav-bar');
+      if (!bar || bar.style.display === 'none') return;
+      if (ev.target && /^(INPUT|TEXTAREA)$/.test(ev.target.tagName)) return;
+      ev.preventDefault();
+      jumpToMark(kwNavState.idx + (ev.shiftKey ? -1 : 1));
     });
   }
 function safeJson(v) { try { return typeof v === 'string' ? v : JSON.stringify(v, null, 2); } catch { return String(v); } }
