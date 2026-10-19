@@ -292,6 +292,8 @@
   function showHome() {
     state.currentSessionId = '';
     state.fulltextKeyword = '';  // 离开会话清掉正文关键词高亮/导航
+    state.fulltextIsRegex = false;
+    state.fulltextMode = '';
     hideKwNav();
     buildResumeCmd();
     highlightActive();
@@ -682,13 +684,26 @@
   };
   if ($('search-full-chk')) {
     $('search-full-chk').onchange = () => {
-      // 模式提示词随开关切换
-      $('search-input').placeholder = $('search-full-chk').checked
-        ? '搜索会话正文内容(较慢)'
+      const full = $('search-full-chk').checked;
+      // 模式提示词 + 策略 chips 随开关切换
+      $('search-input').placeholder = full
+        ? '字面串 / /正则/ / re:手机号 (策略按钮在下方)'
         : '搜索会话标题/ID/目录';
+      if ($('search-pattern-chips')) $('search-pattern-chips').style.display = full ? 'flex' : 'none';
       lastFullQuery = null; // 模式切换强制重跑
       runSearch();
     };
+  }
+  // 策略 chips:点击填入对应模式查询并触发全文搜索
+  if ($('search-pattern-chips')) {
+    $('search-pattern-chips').querySelectorAll('.chip').forEach(ch => {
+      ch.onclick = () => {
+        if (!$('search-full-chk').checked) $('search-full-chk').click();
+        $('search-input').value = ch.dataset.pattern;
+        lastFullQuery = null;
+        runSearch();
+      };
+    });
   }
   async function runSearch() {
     const q = $('search-input').value.trim();
@@ -705,10 +720,13 @@
       lastFullQuery = q;
       note.style.display = 'block';
       note.textContent = `全文搜索「${q}」中…`;
-      state.fulltextKeyword = q;  // 进会话时正文高亮 + 跳转导航用
       const list = $('session-list'); list.innerHTML = '<div class="empty-state"><p>扫描会话正文…</p></div>';
       try {
         const res = await fetchJSON(`/api/search?source=${state.source}&q=${encodeURIComponent(q)}`);
+        // 记住后端解析出的正则源(供进会话正文高亮);字面模式存字面串
+        state.fulltextKeyword = res.regexSource || q;
+        state.fulltextIsRegex = !!res.regexSource;
+        state.fulltextMode = res.mode || '';
         const hits = res.results || [];
         list.innerHTML = '';
         hits.forEach(h => {
@@ -716,7 +734,7 @@
           list.appendChild(sessionItem(s || { id: h.sessionId, title: h.sessionId.slice(0, 8) + '…', project: '', time_created: 0 }, h.matches));
         });
         note.textContent = hits.length
-          ? `全文命中 ${hits.length} 个会话`
+          ? `${state.fulltextMode || '全文'}命中 ${hits.length} 个会话`
           : `全文未命中(仅扫描最近 600 个会话文件)`;
       } catch (e) {
         list.innerHTML = `<div class="empty-state"><p>全文搜索失败: ${escapeHtml(e.message)}</p></div>`;
@@ -820,7 +838,35 @@
     // task1 guard: merge consecutive single-char text parts (legacy backend split each char
     // into its own part, each rendering as one-char-per-line vertically).
     const kw = state.fulltextKeyword || '';
+    let kwRegex = null;
+    if (kw && state.fulltextIsRegex) {
+      try { kwRegex = new RegExp(kw, 'gi'); } catch { kwRegex = null; }
+    }
     const marks = [];   // 全文模式下收集所有关键词 <mark>,供"跳下一个"定位
+    const highlightInto = (x, text) => {
+      // 关键词高亮:逐段拆 textNode/mark,不经 innerHTML,防注入
+      if (!kw) { x.textContent = text; return; }
+      if (kwRegex) {
+        // 正则模式:全局匹配逐段高亮(同位置匹配可能零宽,跳过防空循环)
+        let last = 0; let m;
+        kwRegex.lastIndex = 0;
+        while ((m = kwRegex.exec(text)) !== null) {
+          if (m[0].length === 0) { kwRegex.lastIndex++; continue; }
+          if (m.index > last) x.appendChild(document.createTextNode(text.slice(last, m.index)));
+          const mk = el('mark', 'kw'); mk.textContent = m[0]; x.appendChild(mk); marks.push(mk);
+          last = m.index + m[0].length;
+          if (marks.length >= 500) break;  // 防极端超多命中拖死渲染
+        }
+        if (last < text.length) x.appendChild(document.createTextNode(text.slice(last)));
+      } else if (text.includes(kw)) {
+        text.split(kw).forEach((seg, i) => {
+          if (i) { const mk = el('mark', 'kw'); mk.textContent = kw; x.appendChild(mk); marks.push(mk); }
+          if (seg) x.appendChild(document.createTextNode(seg));
+        });
+      } else {
+        x.textContent = text;
+      }
+    };
     messages.forEach(m => {
       const blocks = [];
       let buf = '';
@@ -843,15 +889,8 @@
       const role = el('div', 'm-role'); role.textContent = m.role; div.appendChild(role);
       blocks.forEach(b => {
         const x = el('div', b.kind === 'reasoning' ? 'part-reasoning' : 'part-text');
-        // 全文搜索进入:关键词高亮(textContent 逐段拆,不经 innerHTML,防注入)
-        if (kw && b.kind === 'text' && b.text.includes(kw)) {
-          b.text.split(kw).forEach((seg, i, arr) => {
-            if (i) { const mk = el('mark', 'kw'); mk.textContent = kw; x.appendChild(mk); marks.push(mk); }
-            if (seg) x.appendChild(document.createTextNode(seg));
-          });
-        } else {
-          x.textContent = b.text;
-        }
+        // 全文搜索进入:关键词高亮(字面/正则统一走 highlightInto,textContent 逐段拆,不经 innerHTML,防注入)
+        highlightInto(x, b.text);
         div.appendChild(x);
       });
       cont.appendChild(div);

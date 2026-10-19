@@ -191,12 +191,14 @@ class Handler(BaseHTTPRequestHandler):
                     return _json(self, {"results": []})
                 from adapters import content_search
                 try:
-                    results = content_search.search(source, needle,
-                                                    limit=int(q.get("limit", ["50"])[0]))
+                    data = content_search.search(source, needle,
+                                                 limit=int(q.get("limit", ["50"])[0]))
+                except content_search.InvalidQuery as e:
+                    return _json(self, {"error": str(e)}, 400)
                 except Exception as e:
                     traceback.print_exc()
                     return _json(self, {"error": str(e)}, 500)
-                return _json(self, {"results": results, "query": needle})
+                return _json(self, data)
             if path == "/api/session":
                 source = q.get("source", ["claude"])[0]
                 sid = q.get("id", [""])[0]

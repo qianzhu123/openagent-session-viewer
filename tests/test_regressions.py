@@ -143,6 +143,8 @@ class RegressionTests(unittest.TestCase):
     def test_content_search_engine_finds_claude_text(self):
         import tempfile, os
         from adapters import content_search
+        q = content_search.compile_query("HomeArt")
+        self.assertEqual(q["literal"], "HomeArt")  # 字面模式走快路径
         with tempfile.TemporaryDirectory() as tmp:
             p = os.path.join(tmp, "abc123.jsonl")
             with open(p, "w", encoding="utf-8") as f:
@@ -150,7 +152,7 @@ class RegressionTests(unittest.TestCase):
                     {"type": "text", "text": "帮我修复 HomeArt 的登录 bug"}]}}) + "\n")
                 f.write(json.dumps({"type": "assistant", "message": {"content": [
                     {"type": "text", "text": "好的,我来看看登录逻辑。"}]}}) + "\n")
-            res = content_search.search_jsonl_dir(tmp, content_search._extract_claude_texts, "HomeArt", 10)
+            res = content_search.search_jsonl_dir(tmp, content_search._extract_claude_texts, q, 10)
             self.assertEqual(len(res), 1)
             self.assertEqual(res[0]["sessionId"], "abc123")
             m = res[0]["matches"][0]
@@ -159,7 +161,56 @@ class RegressionTests(unittest.TestCase):
                 m["snippet"][m["hitStart"]:m["hitEnd"]], "HomeArt")
             # 未命中关键词返回空
             self.assertEqual(
-                content_search.search_jsonl_dir(tmp, content_search._extract_claude_texts, "不存在的词", 10), [])
+                content_search.search_jsonl_dir(
+                    tmp, content_search._extract_claude_texts,
+                    content_search.compile_query("不存在的词"), 10), [])
+
+    def test_compile_query_modes(self):
+        from adapters import content_search as cs
+        # 1) 字面串
+        q = cs.compile_query("HomeArt")
+        self.assertIsNone(q["regex"]); self.assertEqual(q["literal"], "HomeArt")
+        # 2) /.../ 显式正则
+        q = cs.compile_query("/sk-\\w{16,}/")
+        self.assertIsNotNone(q["regex"]); self.assertIsNone(q["literal"])
+        self.assertEqual(q["regex"].pattern, r"sk-\w{16,}")
+        # 3) re: 描述
+        q = cs.compile_query("re:手机号")
+        self.assertIsNotNone(q["regex"])
+        self.assertIsNotNone(q["regex"].search("联系电话13663883357收尾"))
+        self.assertIsNone(q["regex"].search("12345"))
+        # 4) 自动探测:像正则且能编译
+        q = cs.compile_query("sk-[A-Za-z0-9]{16,}")
+        self.assertIsNotNone(q["regex"])
+        # 有正则特征但编不过 -> 回退字面(如普通文件名)
+        q = cs.compile_query("文件(1).txt")
+        self.assertIsNone(q["regex"]); self.assertEqual(q["literal"], "文件(1).txt")
+        # 5) 无效正则/未知描述 -> InvalidQuery(ValueError)
+        with self.assertRaises(cs.InvalidQuery):
+            cs.compile_query("/[invalid(/")
+        with self.assertRaises(cs.InvalidQuery):
+            cs.compile_query("re:不存在的模式")
+        with self.assertRaises(cs.InvalidQuery):
+            cs.compile_query("  ")
+        # search() 透传 regexSource/mode
+        out = cs.search("claude", "/HomeArt/", limit=5)
+        self.assertEqual(out["regexSource"], "HomeArt")
+        self.assertIn("正则", out["mode"])
+
+    def test_regex_mode_hits_via_engine(self):
+        import tempfile, os
+        from adapters import content_search as cs
+        with tempfile.TemporaryDirectory() as tmp:
+            p = os.path.join(tmp, "reg123.jsonl")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(json.dumps({"type": "user", "message": {"content": [
+                    {"type": "text", "text": "key: sk-abcdef1234567890abcd 结束"}]}}) + "\n")
+            q = cs.compile_query("re:密钥")
+            res = cs.search_jsonl_dir(tmp, cs._extract_claude_texts, q, 10)
+            self.assertEqual(len(res), 1)
+            m = res[0]["matches"][0]
+            self.assertEqual(
+                m["snippet"][m["hitStart"]:m["hitEnd"]], "sk-abcdef1234567890abcd")
 
     def test_frontend_search_is_client_side_and_fulltext_ui_exists(self):
         root = Path(__file__).resolve().parents[1]

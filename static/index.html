@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/style.css?v=20261019b">
+    <link rel="stylesheet" href="/style.css?v=20261019c">
 </head>
 <body class="canvas">
     <!-- Top Nav:固定布局,常驻恢复指令 -->
@@ -46,6 +46,15 @@
                     <label class="search-full-toggle" title="在会话正文(消息内容)中搜索,较慢">
                         <input type="checkbox" id="search-full-chk">全文
                     </label>
+                </div>
+                <div class="search-pattern-chips" id="search-pattern-chips" style="display:none;">
+                    <span class="chips-label">策略:</span>
+                    <button class="chip" type="button" data-pattern="re:手机号">手机号</button>
+                    <button class="chip" type="button" data-pattern="re:邮箱">邮箱</button>
+                    <button class="chip" type="button" data-pattern="re:身份证">身份证</button>
+                    <button class="chip" type="button" data-pattern="re:ip">IP</button>
+                    <button class="chip" type="button" data-pattern="re:密钥">密钥</button>
+                    <button class="chip" type="button" data-pattern="re:url">URL</button>
                 </div>
                 <div class="search-results-note" id="search-results-note" style="display:none;"></div>
                 <button class="btn-secondary session-refresh-btn" id="session-refresh-btn" type="button" title="重新扫描本地会话">↻ 刷新会话</button>
@@ -160,6 +169,6 @@
         <button class="ctx-item ctx-danger" id="ctx-local-del" type="button">🗑 移至回收站</button>
     </div>
 
-    <script src="/app.js?v=20261019b"></script>
+    <script src="/app.js?v=20261019c"></script>
 </body>
 </html>
