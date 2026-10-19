@@ -680,6 +680,10 @@
   };
   if ($('search-full-chk')) {
     $('search-full-chk').onchange = () => {
+      // 模式提示词随开关切换
+      $('search-input').placeholder = $('search-full-chk').checked
+        ? '搜索会话正文内容(较慢)'
+        : '搜索会话标题/ID/目录';
       lastFullQuery = null; // 模式切换强制重跑
       runSearch();
     };
