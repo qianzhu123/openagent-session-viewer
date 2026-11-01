@@ -16,6 +16,7 @@ from adapters.catalog import (build_claude_catalog, build_codex_catalog,
                               build_opencode_catalog, build_zcode_catalog)
 from adapters import cache as cache_mod
 from adapters import session_meta as meta
+from adapters import title_writeback
 
 ADAPTERS = {
     "claude": ClaudeAdapter(),
@@ -271,7 +272,24 @@ class Handler(BaseHTTPRequestHandler):
                 if not source or not sid:
                     return _json(self, {"error": "need source&sessionId"}, 400)
                 meta.set_title_alias(source, sid, body.get("titleAlias", ""))
+                # claude 源:同步写回 jsonl(append ai-title),终端 claude -r 同步生效
+                if source == "claude" and body.get("writeBack", True):
+                    fp = a.find_session_path(sid) if hasattr(a, "find_session_path") else None
+                    wb, err = None, None
+                    if fp:
+                        try:
+                            wb = title_writeback.write_title(fp, body.get("titleAlias", ""))
+                        except Exception as e:
+                            traceback.print_exc()
+                            err = str(e)
+                    else:
+                        err = "session file not found"
                 self._invalidate_sessions_cache(source)
+                if source == "claude" and body.get("writeBack", True):
+                    resp = {"ok": True, "writeBack": wb}
+                    if wb is None:
+                        resp["writeBackError"] = err
+                    return _json(self, resp)
                 return _json(self, {"ok": True})
             if path == "/api/sessions/delete":
                 if not source or not sid or not a:

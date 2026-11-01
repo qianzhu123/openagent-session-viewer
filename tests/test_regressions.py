@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -225,6 +226,71 @@ class RegressionTests(unittest.TestCase):
         self.assertIn('id="search-full-chk"', html)
         # 会话列表存进 state 供全文结果复用标题
         self.assertIn("state.lastSessions", js)
+
+
+class TitleTests(unittest.TestCase):
+    """ai-title 读取与写回:污染对跳过 + append-only 写回。"""
+
+    def _mk_jsonl(self, events):
+        f = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False,
+                                        encoding="utf-8", newline="\n")
+        for ev in events:
+            f.write(json.dumps(ev, ensure_ascii=False) + "\n")
+        f.close()
+        self.addCleanup(os.remove, f.name)
+        return f.name
+
+    def test_title_takes_last_ai_title_like_cli(self):
+        """取最后一条 ai-title,与 CLI claude -r 恢复列表同规则(两端统一)。"""
+        from adapters.claude import ClaudeAdapter
+        path = self._mk_jsonl([
+            {"type": "user", "message": {"role": "user", "content": "开工"}},
+            {"type": "ai-title", "aiTitle": "旧标题"},
+            {"type": "ai-title", "aiTitle": "agent-slug-name"},
+            {"type": "agent-name", "agentName": "agent-slug-name"},
+            {"type": "assistant", "message": {"role": "assistant", "content": []}},
+            {"type": "ai-title", "aiTitle": "新标题"},
+        ])
+        self.assertEqual(ClaudeAdapter()._session_title(path), "新标题")
+
+    def test_title_takes_last_clean_title(self):
+        """无污染时取最后一条 ai-title(与 CLI claude -r 同规则)。"""
+        from adapters.claude import ClaudeAdapter
+        path = self._mk_jsonl([
+            {"type": "user", "message": {"role": "user", "content": "开工"}},
+            {"type": "ai-title", "aiTitle": "旧标题"},
+            {"type": "assistant", "message": {"role": "assistant", "content": []}},
+            {"type": "ai-title", "aiTitle": "新标题"},
+        ])
+        self.assertEqual(ClaudeAdapter()._session_title(path), "新标题")
+
+    def test_title_writeback_appends_and_reads_back(self):
+        """写回=追加一条 ai-title,写后读取应得到新标题。"""
+        from adapters.claude import ClaudeAdapter
+        from adapters import title_writeback
+        path = self._mk_jsonl([
+            {"type": "user", "message": {"role": "user", "content": "开工"}},
+            {"type": "ai-title", "aiTitle": "agent-pollution"},
+            {"type": "agent-name", "agentName": "agent-pollution"},
+        ])
+        r = title_writeback.write_title(path, "统一标题")
+        self.assertEqual(r["written"], "统一标题")
+        self.assertEqual(ClaudeAdapter()._session_title(path), "统一标题")
+        # 追加不改写历史:文件里仍能看到原事件
+        with open(path, encoding="utf-8") as f:
+            raw = f.read()
+        self.assertIn("agent-pollution", raw)
+        # 空标题/缺文件应报错
+        with self.assertRaises(ValueError):
+            title_writeback.write_title(path, "  ")
+        with self.assertRaises(FileNotFoundError):
+            title_writeback.write_title(path + ".missing", "x")
+
+    def test_server_meta_route_has_claude_writeback(self):
+        """server.py 的 meta 路由对 claude 源走写回。"""
+        src = (Path(__file__).resolve().parents[1] / "server.py").read_text(encoding="utf-8")
+        self.assertIn("title_writeback.write_title", src)
+        self.assertIn('body.get("writeBack", True)', src)
 
 
 if __name__ == "__main__":

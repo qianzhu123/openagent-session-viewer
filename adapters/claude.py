@@ -73,8 +73,17 @@ class ClaudeAdapter(BaseAdapter):
         return glob.glob(os.path.join(self.root, "*", "*.jsonl"))
 
     def _session_title(self, path: str) -> str:
-        """优先 ai-title,退回首条 user 文本。"""
+        """优先 ai-title,退回首条 user 文本。
+
+        取文件中最后一条 ai-title——与 CLI `claude -r` 恢复列表完全同规则,
+        保证后台界面与终端标题永远一致。注意 CLI v2.1.296+ 在后台子代理
+        运行期间会把代理名(成对 ai-title+agent-name)写进主会话 jsonl,
+        导致"最后一条"变成代理名 slug——这不是读取端 bug,两端本来就该
+        一致;要改标题走 title_writeback.write_title 追加新 ai-title 即可,
+        两端同步生效。
+        """
         first_user = ""
+        title = ""
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
                 line = line.strip()
@@ -86,14 +95,15 @@ class ClaudeAdapter(BaseAdapter):
                     continue
                 t = ev.get("type")
                 if t == "ai-title":
-                    return ev.get("aiTitle", "") or ""
+                    title = ev.get("aiTitle", "") or ""
+                    continue
                 if t == "user" and not first_user:
                     msg = ev.get("message", {})
                     for c in msg.get("content", []):
                         if isinstance(c, dict) and c.get("type") == "text":
                             first_user = (c.get("text", "") or "")[:80]
                             break
-        return first_user
+        return title or first_user
 
     def list_sessions(self, q="", project="", limit=100, offset=0):
         files = self._files()

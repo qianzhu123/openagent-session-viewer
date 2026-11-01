@@ -606,9 +606,9 @@
     const overlay = el('div', 'modal-overlay');
     const card = el('div', 'modal-card');
 
-    const title = el('h2', 'modal-title'); title.textContent = '编辑会话标题别名'; card.appendChild(title);
+    const title = el('h2', 'modal-title'); title.textContent = '编辑会话标题'; card.appendChild(title);
     const desc = el('p', 'modal-desc');
-    desc.textContent = '仅修改本地展示别名，不改原始会话文件。留空则恢复原标题。';
+    desc.textContent = 'claude 源会同步写入会话文件，终端 claude -r 列表同步生效；其余源仅改本地展示别名。留空则恢复原标题。';
     card.appendChild(desc);
 
     const inp = el('input', 'modal-input');
@@ -620,8 +620,14 @@
     const saveBtn = el('button', 'btn-primary'); saveBtn.textContent = '保存';
     saveBtn.onclick = async () => {
       try {
-        await postJSON('/api/sessions/meta', { source: state.source, sessionId: s.id, titleAlias: inp.value.trim() });
-        toast('标题已更新');
+        const r = await postJSON('/api/sessions/meta', { source: state.source, sessionId: s.id, titleAlias: inp.value.trim() });
+        if (r && r.writeBackError) {
+          toast(`别名已存，但写回会话文件失败：${r.writeBackError}`);
+        } else if (r && r.writeBack && state.source === 'claude') {
+          toast('标题已更新，终端 claude -r 同步生效');
+        } else {
+          toast('标题已更新');
+        }
         overlay.remove();
         // 只更新列表中该条目的标题，不整体刷新
         const item = $('session-list').querySelector(`.session-item[data-id="${s.id}"]`);
