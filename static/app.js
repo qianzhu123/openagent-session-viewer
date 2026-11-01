@@ -332,10 +332,22 @@
       else cmd = `opencode --session ${state.currentSessionId}`;
       // 第二参数:跳过权限确认(各 CLI 参数已核对 --help)
       if ($('resume-bypass-chk') && $('resume-bypass-chk').checked) cmd += ' ' + RESUME_BYPASS_FLAG[state.source];
+      // 第三参数:思考强度(--effort 仅 claude 支持,选中则追加,选择记忆在 localStorage)
+      if (state.source === 'claude' && $('resume-effort-sel')) {
+        const ef = $('resume-effort-sel').value;
+        if (ef) cmd += ` --effort ${ef}`;
+      }
       $('resume-cmd').textContent = cmd;
     } else {
       bar.classList.remove('show');
     }
+  }
+  if ($('resume-effort-sel')) {
+    $('resume-effort-sel').value = lsGet('openagent_resume_effort', '');
+    $('resume-effort-sel').onchange = () => {
+      lsSet('openagent_resume_effort', $('resume-effort-sel').value);
+      buildResumeCmd();
+    };
   }
   $('copy-resume-btn').onclick = async () => {
     if (!state.currentSessionId) return;

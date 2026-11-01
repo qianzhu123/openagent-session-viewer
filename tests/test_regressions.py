@@ -58,6 +58,18 @@ class RegressionTests(unittest.TestCase):
         self.assertIn("combo-input-list", js)
         self.assertIn("document.addEventListener('scroll', onDocumentScroll, true)", js)
 
+    def test_resume_bar_has_effort_selector(self):
+        """恢复命令条支持 --effort 下拉:HTML 有控件,JS 记忆选择并拼进 claude 命令。"""
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('id="resume-effort-sel"', html)
+        js = (root / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("resume-effort-sel", js)
+        self.assertIn("--effort", js)
+        # 选择持久化在 localStorage,且仅 claude 源追加
+        self.assertIn("openagent_resume_effort", js)
+        self.assertIn("state.source === 'claude'", js)
+
     def test_zcode_adapter_normalizes_sqlite_and_stays_readonly(self):
         import json as _j
         import sqlite3

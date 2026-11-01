@@ -27,6 +27,14 @@
         </div>
         <div class="nav-right resume-bar" id="resume-bar">
             <label class="reasoning-toggle" title="恢复命令追加跳过权限确认参数(危险)"><input type="checkbox" id="resume-bypass-chk">跳过权限</label>
+            <select id="resume-effort-sel" class="resume-effort" title="恢复命令追加 --effort 思考强度(仅本次会话生效)">
+                <option value="">effort:默认</option>
+                <option value="low">effort:low</option>
+                <option value="medium">effort:medium</option>
+                <option value="high">effort:high</option>
+                <option value="xhigh">effort:xhigh</option>
+                <option value="max">effort:max</option>
+            </select>
             <code id="resume-cmd" class="resume-code">claude -r <session-id></code>
             <button class="btn-icon-circular" id="copy-resume-btn" title="复制恢复命令" type="button">⧉</button>
         </div>

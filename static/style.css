@@ -48,6 +48,8 @@ body{font-family:var(--sans);color:var(--ink);font-size:16px;line-height:1.55}
 .nav-right{justify-self:end;display:flex;align-items:center;gap:8px;min-height:40px}
 .resume-bar{display:none}
 .resume-bar.show{display:flex}
+.resume-effort{font-size:12.5px;color:var(--ink);background:var(--canvas);border:1px solid var(--hairline);
+  border-radius:var(--r-md);height:32px;padding:0 6px;cursor:pointer}
 .resume-code{font-family:var(--mono);font-size:13px;background:var(--surface-dark);color:var(--on-dark);
   padding:8px 12px;border-radius:var(--r-md);max-width:46vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
