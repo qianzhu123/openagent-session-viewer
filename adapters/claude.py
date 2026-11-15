@@ -7,6 +7,7 @@ tool_use/tool_result come in pairs).
 from __future__ import annotations
 import json, os, glob
 from .base import BaseAdapter, Session, Message, Part
+from . import cache as cache_mod
 
 PROJ_DIR = os.path.expanduser("~/.claude/projects")
 
@@ -103,17 +104,23 @@ class ClaudeAdapter(BaseAdapter):
                         if isinstance(c, dict) and c.get("type") == "text":
                             first_user = (c.get("text", "") or "")[:80]
                             break
-        return title or first_user
+        return {"title": title or first_user}
+
+    def _titles_cached(self, files: list) -> dict:
+        """路径 -> {title},经 titleindex 缓存:只重读 mtime/size 变化过的文件。"""
+        return cache_mod.title_index("claude", files,
+                                     lambda p: self._session_title(p))
 
     def list_sessions(self, q="", project="", limit=100, offset=0):
         files = self._files()
+        titles = self._titles_cached(files)
         sessions = []
         projects = set()
         for p in files:
             proj = _decode_project(p)
             projects.add(proj)
             sid = os.path.splitext(os.path.basename(p))[0]
-            title = self._session_title(p) or "(无标题)"
+            title = (titles.get(p) or {}).get("title") or "(无标题)"
             mtime = int(os.path.getmtime(p) * 1000)
             sessions.append(Session(id=sid, source=self.source, title=title,
                                     project=proj, time_created=mtime,
@@ -141,7 +148,8 @@ class ClaudeAdapter(BaseAdapter):
         if not path:
             raise KeyError(session_id)
         sess = Session(id=session_id, source=self.source,
-                       project=_decode_project(path), title=self._session_title(path),
+                       project=_decode_project(path),
+                       title=self._session_title(path)["title"],
                        time_created=int(os.path.getmtime(path) * 1000)).to_dict()
         messages = []
         with open(path, "r", encoding="utf-8", errors="replace") as f:

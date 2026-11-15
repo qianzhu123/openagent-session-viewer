@@ -24,7 +24,7 @@ if /i "!MODE!"=="start" (
     powershell -NoProfile -Command "try { $r=Invoke-RestMethod -TimeoutSec 2 http://127.0.0.1:%PORT%/api/health; if($r.ok){exit 0}else{exit 1} } catch { exit 1 }" >nul 2>&1
     if not errorlevel 1 (
         if "!QUIET!"=="0" echo [info] server is already running on port %PORT%.
-        start "" http://127.0.0.1:%PORT% >nul 2>&1
+        REM 2026-11-08 用户定论: 启动脚本不再自动开浏览器
         exit /b 0
     )
 )
@@ -48,7 +48,7 @@ if not defined PY (
 )
 
 if "!QUIET!"=="0" echo [run] Python: !PY!  port: %PORT%
-start "" http://127.0.0.1:%PORT% >nul 2>&1
+REM 2026-11-08 用户定论: 启动脚本不再自动开浏览器, 界面自己开 http://127.0.0.1:%PORT%
 "!PY!" "%~dp0server.py" --port %PORT% 2>>"%ERRLOG%"
 set "EC=!errorlevel!"
 if not "!EC!"=="0" (

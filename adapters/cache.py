@@ -32,8 +32,52 @@ def read_cache(name: str):
 
 
 def write_cache(name: str, data: dict):
+    # 原子写:先写 .tmp 再 replace,避免并发请求交错写坏缓存文件
     p = _path(name)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, p)
+
+
+def title_index(source: str, files: list, reader) -> dict:
+    """路径 -> 标题头信息缓存:只重读 mtime/size 变化过的文件。
+
+    列表页只需要标题/项目等元数据,但 jsonl 会话文件动辄数百 MB,
+    全量重读只为取标题要 10s+(claude 源 1.3GB 实测 13.5s)。
+    本索引让刷新只 stat 全部文件、重读有变化的那几个,其余秒回。
+
+    reader(path) 返回要缓存的字段 dict(如 {"title": ...});mtime/size 由本函数补记。
+    """
+    name = f"titleindex_{source}.json"
+    idx = read_cache(name)
+    if not isinstance(idx, dict):
+        idx = {}
+    changed = False
+    for p in files:
+        try:
+            st = os.stat(p)
+        except OSError:
+            idx.pop(p, None)
+            changed = True
+            continue
+        e = idx.get(p)
+        if e and e.get("mtime") == st.st_mtime and e.get("size") == st.st_size:
+            continue
+        try:
+            entry = reader(p) or {}
+        except Exception:
+            entry = {}
+        entry["mtime"] = st.st_mtime
+        entry["size"] = st.st_size
+        idx[p] = entry
+        changed = True
+    alive = set(files)
+    for p in [k for k in idx if k not in alive]:
+        del idx[p]
+        changed = True
+    if changed:
+        write_cache(name, idx)
+    return idx
 
 
 def _proj_key(project_root: str) -> str:

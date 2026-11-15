@@ -79,8 +79,15 @@ body{font-family:var(--sans);color:var(--ink);font-size:16px;line-height:1.55}
 .head-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .pane-title{font-size:22px;font-weight:500;letter-spacing:-0.3px}
 .session-count{font-size:12px}
-.search-row{display:flex;align-items:center;gap:8px;margin-top:0}
+.search-row{display:flex;align-items:center;gap:6px;margin-top:0}
 .search-input{margin-top:0;flex:1;min-width:0}
+/* 搜索执行/清空按钮(圆形小按钮,与恢复条复制按钮同风格) */
+.search-btn,.search-clear-btn{flex:none;width:28px;height:28px;font-size:13px;border-radius:50%;
+  background:var(--surface-soft);border:1px solid var(--hairline);color:var(--ink);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
+.search-btn:hover,.search-clear-btn:hover{background:var(--surface-card);border-color:var(--primary);color:var(--primary-active)}
+.search-btn:active,.search-clear-btn:active{background:var(--surface-soft)}
+.search-clear-btn{font-size:16px;color:var(--muted)}
 .search-full-toggle{display:flex;align-items:center;gap:4px;font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap;user-select:none}
 .search-full-toggle input{cursor:pointer}
 .search-full-toggle:hover{color:var(--ink)}

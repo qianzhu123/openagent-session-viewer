@@ -264,9 +264,21 @@
     renderCmdBuilder(true);
     buildApiFields();
     restoreFromDraft();
-    // 切源重置搜索状态(输入保留,重跑;全文命中缓存失效)
+    // 切源重置搜索:输入框清空+在途响应作废,列表重新加载
     lastFullQuery = null;
-    if ($('search-results-note')) $('search-results-note').style.display = 'none';
+    searchTimer++;
+    if ($('search-input')) {
+      $('search-input').value = '';
+      updateSearchClearBtn();
+    }
+    if ($('search-results-note')) {
+      $('search-results-note').style.display = 'none';
+      $('search-results-note').textContent = '';
+    }
+    state.fulltextKeyword = '';
+    state.fulltextIsRegex = false;
+    state.fulltextMode = '';
+    hideKwNav();
     showHome();              // 切 source 一律回首页,不再停留旧会话视图
     loadSessions();
     loadCatalog();
@@ -694,30 +706,55 @@
   // 两种模式:
   //  - 默认(元数据):对已加载列表做客户端过滤(标题/ID/目录/文件路径),瞬时且不受服务端缓存影响。
   //  - 全文(勾选):调 /api/search 扫会话正文,渲染命中片段卡片。
-  let searchTimer;
+  // 交互:输入只更新清空按钮显隐,点"搜索"按钮(或 Enter)才执行;清空按钮一键还原列表。
+  // 竞态防护:全文扫描慢(可到几十秒),给每次搜索编号,慢的旧响应迟到时若编号
+  // 已过期则直接丢弃——否则清空搜索后,在途响应会把恢复好的列表再覆盖成旧结果。
+  let searchTimer = 0;          // 自增搜索编号,过期响应据此丢弃
   let lastFullQuery = null;
-  $('search-input').oninput = () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(runSearch, 250);
+  function updateSearchClearBtn() {
+    const btn = $('search-clear-btn');
+    if (btn) btn.style.display = $('search-input').value ? '' : 'none';
+  }
+  $('search-input').oninput = () => { updateSearchClearBtn(); };
+  $('search-input').onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
   };
+  if ($('search-btn')) $('search-btn').onclick = () => runSearch();
+  if ($('search-clear-btn')) $('search-clear-btn').onclick = () => clearSearch();
+  function clearSearch() {
+    const inp = $('search-input');
+    inp.value = '';
+    updateSearchClearBtn();
+    lastFullQuery = null;
+    searchTimer++;              // 使所有在途搜索响应作废
+    const note = $('search-results-note');
+    note.style.display = 'none';
+    note.textContent = '';
+    // 离开全文态:清掉正文关键词高亮,避免下次打开无关会话被旧关键词标亮
+    state.fulltextKeyword = '';
+    state.fulltextIsRegex = false;
+    state.fulltextMode = '';
+    hideKwNav();
+    loadSessions(false);        // 恢复缓存态完整列表,不强制重扫
+  }
   if ($('search-full-chk')) {
     $('search-full-chk').onchange = () => {
       const full = $('search-full-chk').checked;
       // 模式提示词 + 策略 chips 随开关切换
       $('search-input').placeholder = full
-        ? '字面串 / /正则/ / re:手机号 (策略按钮在下方)'
-        : '搜索会话标题/ID/目录';
+        ? '字面串 / /正则/ / re:手机号 (点搜索执行)'
+        : '搜索会话标题/ID/目录 (点搜索执行)';
       if ($('search-pattern-chips')) $('search-pattern-chips').style.display = full ? 'flex' : 'none';
-      lastFullQuery = null; // 模式切换强制重跑
-      runSearch();
+      lastFullQuery = null; // 模式切换后下次点搜索强制重跑
     };
   }
-  // 策略 chips:点击填入对应模式查询并触发全文搜索
+  // 策略 chips:点击填入对应模式查询并立即执行全文搜索
   if ($('search-pattern-chips')) {
     $('search-pattern-chips').querySelectorAll('.chip').forEach(ch => {
       ch.onclick = () => {
         if (!$('search-full-chk').checked) $('search-full-chk').click();
         $('search-input').value = ch.dataset.pattern;
+        updateSearchClearBtn();
         lastFullQuery = null;
         runSearch();
       };
@@ -727,6 +764,7 @@
     const q = $('search-input').value.trim();
     const full = $('search-full-chk') && $('search-full-chk').checked;
     const note = $('search-results-note');
+    const myRun = ++searchTimer;    // 本次搜索编号;清空/新搜索会使之过期
     if (!q) {
       note.style.display = 'none';
       // 恢复原始列表(重新加载缓存态列表,不强制重扫)
@@ -741,6 +779,7 @@
       const list = $('session-list'); list.innerHTML = '<div class="empty-state"><p>扫描会话正文…</p></div>';
       try {
         const res = await fetchJSON(`/api/search?source=${state.source}&q=${encodeURIComponent(q)}`);
+        if (myRun !== searchTimer) return;  // 响应期间已清空/换查询:丢弃过期结果
         // 记住后端解析出的正则源(供进会话正文高亮);字面模式存字面串
         state.fulltextKeyword = res.regexSource || q;
         state.fulltextIsRegex = !!res.regexSource;
@@ -755,6 +794,7 @@
           ? `${state.fulltextMode || '全文'}命中 ${hits.length} 个会话`
           : `全文未命中(仅扫描最近 600 个会话文件)`;
       } catch (e) {
+        if (myRun !== searchTimer) return;
         list.innerHTML = `<div class="empty-state"><p>全文搜索失败: ${escapeHtml(e.message)}</p></div>`;
         note.textContent = '';
       }
@@ -1306,6 +1346,21 @@ function safeJson(v) { try { return typeof v === 'string' ? v : JSON.stringify(v
   updateHero();
   renderCmdBuilder(true);
   buildApiFields();
-  loadSessions(true);   // 首次加载强制重扫:F5/直开页面即拿到最新会话,而非旧缓存
-  loadCatalog(true);     // F5/直开页面也强制重建本地索引，与“刷新索引”行为一致
+  // 首屏策略:先秒出缓存列表/索引,再后台静默刷新(标题索引已热,只重读变化的文件)。
+  // 刷新完成后若仍在首页且没有搜索/查看动作,原地更新列表;否则不打扰当前操作。
+  loadSessions(false);
+  loadCatalog(false);
+  setTimeout(async () => {
+    try {
+      const r = await fetchJSON(`/api/sessions?source=${state.source}&limit=300&refresh=1&_t=${Date.now()}`);
+      if (state.currentSessionId || $('search-input').value) return; // 用户已进入会话/搜索中:不打扰
+      state.lastSessions = r.sessions || [];
+      $('session-count').textContent = r.total || 0;
+      fillProjectRootSelect(r.projects || []);
+      const list = $('session-list');
+      list.innerHTML = '';
+      (r.sessions || []).forEach(s => list.appendChild(sessionItem(s)));
+      highlightActive();
+    } catch { /* 后台刷新失败保持缓存列表 */ }
+  }, 50);
 })();

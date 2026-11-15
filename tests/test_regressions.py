@@ -263,7 +263,67 @@ class TitleTests(unittest.TestCase):
             {"type": "assistant", "message": {"role": "assistant", "content": []}},
             {"type": "ai-title", "aiTitle": "新标题"},
         ])
-        self.assertEqual(ClaudeAdapter()._session_title(path), "新标题")
+        self.assertEqual(ClaudeAdapter()._session_title(path)["title"], "新标题")
+
+    def test_titleindex_only_rereads_changed_files(self):
+        """标题索引:未变文件走缓存秒回,追加后 mtime/size 变化触发重读。"""
+        old_data_dir = cache.DATA_DIR
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                cache.DATA_DIR = Path(tmp)
+                p = self._mk_jsonl([
+                    {"type": "user", "message": {"role": "user", "content": "开工"}},
+                    {"type": "ai-title", "aiTitle": "第一版"},
+                ])
+                from adapters.claude import ClaudeAdapter
+                a = ClaudeAdapter()
+                # 首建:reader 被调用一次
+                idx = a._titles_cached([p])
+                self.assertEqual(idx[p]["title"], "第一版")
+                # 未变化:直接命中缓存(titleindex 内部不再调 reader)
+                idx2 = a._titles_cached([p])
+                self.assertEqual(idx2[p]["title"], "第一版")
+                # 追加新标题 -> mtime/size 变化 -> 重读得到新标题(与写回链路一致)
+                from adapters import title_writeback
+                title_writeback.write_title(p, "第二版")
+                idx3 = a._titles_cached([p])
+                self.assertEqual(idx3[p]["title"], "第二版")
+        finally:
+            cache.DATA_DIR = old_data_dir
+
+    def test_cache_write_is_atomic_and_recovers_from_corrupt(self):
+        """缓存写为 .tmp+replace 原子操作;坏文件读时静默返回 None 不炸列表。"""
+        old_data_dir = cache.DATA_DIR
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                cache.DATA_DIR = Path(tmp)
+                cache.write_cache("x.json", {"a": 1})
+                self.assertTrue(cache.read_cache("x.json") == {"a": 1})
+                # 无残留 .tmp
+                self.assertFalse((cache.DATA_DIR / "x.json.tmp").exists())
+                # 坏 JSON -> read_cache 返回 None(titleindex 重建,列表回退重扫)
+                (cache.DATA_DIR / "bad.json").write_text("{not json", encoding="utf-8")
+                self.assertIsNone(cache.read_cache("bad.json"))
+        finally:
+            cache.DATA_DIR = old_data_dir
+
+    def test_frontend_search_uses_button_and_stale_guard(self):
+        """前端:搜索靠按钮/Enter 触发;过期全文响应按编号丢弃;清空按钮可还原。"""
+        root = Path(__file__).resolve().parents[1]
+        js = (root / "static" / "app.js").read_text(encoding="utf-8")
+        html = (root / "static" / "index.html").read_text(encoding="utf-8")
+        # 搜索按钮 + 清空按钮已接入
+        self.assertIn('id="search-btn"', html)
+        self.assertIn('id="search-clear-btn"', html)
+        self.assertIn("clearSearch", js)
+        # 输入不再自动执行搜索(无 250ms 防抖直跑)
+        self.assertNotIn("setTimeout(runSearch, 250)", js)
+        # 过期响应丢弃:runSearch 里对 myRun !== searchTimer 的守卫
+        self.assertIn("myRun !== searchTimer", js)
+        self.assertIn("++searchTimer", js)
+        # 首屏不再强制重扫(缓存秒出,后台静默刷新)
+        self.assertNotIn("loadSessions(true);   // 首次加载强制重扫", js)
+        self.assertIn("loadSessions(false);", js)
 
     def test_title_takes_last_clean_title(self):
         """无污染时取最后一条 ai-title(与 CLI claude -r 同规则)。"""
@@ -274,7 +334,7 @@ class TitleTests(unittest.TestCase):
             {"type": "assistant", "message": {"role": "assistant", "content": []}},
             {"type": "ai-title", "aiTitle": "新标题"},
         ])
-        self.assertEqual(ClaudeAdapter()._session_title(path), "新标题")
+        self.assertEqual(ClaudeAdapter()._session_title(path)["title"], "新标题")
 
     def test_title_writeback_appends_and_reads_back(self):
         """写回=追加一条 ai-title,写后读取应得到新标题。"""
@@ -287,7 +347,7 @@ class TitleTests(unittest.TestCase):
         ])
         r = title_writeback.write_title(path, "统一标题")
         self.assertEqual(r["written"], "统一标题")
-        self.assertEqual(ClaudeAdapter()._session_title(path), "统一标题")
+        self.assertEqual(ClaudeAdapter()._session_title(path)["title"], "统一标题")
         # 追加不改写历史:文件里仍能看到原事件
         with open(path, encoding="utf-8") as f:
             raw = f.read()

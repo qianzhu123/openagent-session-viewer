@@ -17,6 +17,7 @@ JSONL 事件结构(实测):
 from __future__ import annotations
 import json, os, glob
 from .base import BaseAdapter, Session, Message, Part
+from . import cache as cache_mod
 
 ROOT = os.path.expanduser("~/.codex/sessions")
 
@@ -107,16 +108,21 @@ class CodexAdapter(BaseAdapter):
         except Exception:
             pass
         sid = meta_id or _sid_from_path(path)
-        return cwd, title, model, sid
+        return {"cwd": cwd, "title": title, "model": model, "sid": sid}
+
+    def _headers_cached(self, files: list) -> dict:
+        """路径 -> 头信息,经 titleindex 缓存:只重读 mtime/size 变化过的文件。"""
+        return cache_mod.title_index("codex", files, self._read_header)
 
     def list_sessions(self, q="", project="", limit=100, offset=0):
         files = self._files()
+        headers = self._headers_cached(files)
         sessions = []
         projects = set()
         for p in files:
-            cwd, title, model, sid = self._read_header(p)
-            if not title:
-                title = "Codex " + os.path.basename(p)[:24]
+            h = headers.get(p) or {}
+            cwd, model, sid = h.get("cwd", ""), h.get("model", ""), h.get("sid") or _sid_from_path(p)
+            title = h.get("title") or "Codex " + os.path.basename(p)[:24]
             projects.add(cwd)
             mtime = int(os.path.getmtime(p) * 1000)
             sessions.append(Session(id=sid, source=self.source,

@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/style.css?v=20261019c">
+    <link rel="stylesheet" href="/style.css?v=20261115a">
 </head>
 <body class="canvas">
     <!-- Top Nav:固定布局,常驻恢复指令 -->
@@ -50,7 +50,9 @@
                     <span class="session-count badge-pill" id="session-count">0</span>
                 </div>
                 <div class="search-row">
-                    <input class="text-input search-input" id="search-input" type="text" placeholder="搜索会话标题/ID/目录">
+                    <input class="text-input search-input" id="search-input" type="text" placeholder="搜索会话标题/ID/目录 (点按钮执行)">
+                    <button class="btn-icon-circular search-btn" id="search-btn" type="button" title="执行搜索 (Enter)" aria-label="搜索">🔍</button>
+                    <button class="btn-icon-circular search-clear-btn" id="search-clear-btn" type="button" title="清空搜索,恢复列表" aria-label="清空" style="display:none;">×</button>
                     <label class="search-full-toggle" title="在会话正文(消息内容)中搜索,较慢">
                         <input type="checkbox" id="search-full-chk">全文
                     </label>
@@ -177,6 +179,6 @@
         <button class="ctx-item ctx-danger" id="ctx-local-del" type="button">🗑 移至回收站</button>
     </div>
 
-    <script src="/app.js?v=20261019c"></script>
+    <script src="/app.js?v=20261115a"></script>
 </body>
 </html>

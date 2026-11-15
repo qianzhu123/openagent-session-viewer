@@ -35,4 +35,4 @@ def write_title(path: str, title: str) -> dict:
 def read_last_clean_title(path: str) -> str:
     """读最后一条干净 ai-title(与 adapters/claude.py 同判定,供前端回显)。"""
     from .claude import ClaudeAdapter
-    return ClaudeAdapter()._session_title(path)
+    return ClaudeAdapter()._session_title(path)["title"]
