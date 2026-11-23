@@ -15,10 +15,14 @@ A local web interface to uniformly browse the on-disk session records of four ag
 
 ## Quick Start
 
+Double-click `start.bat` (idempotent: reuses a healthy instance, never auto-opens a browser), or run manually:
+
 ```bash
-python server.py --open
+D:\tools\Dev\Runtime\uvenvs\tools\Scripts\python.exe server.py --port 8092
 # http://127.0.0.1:8092
 ```
+
+Do NOT use bare `python` — it resolves to the Microsoft Store stub on this machine.
 
 ## Relationship to the Other Two Viewers
 
