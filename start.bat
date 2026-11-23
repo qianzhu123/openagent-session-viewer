@@ -24,7 +24,7 @@ if /i "!MODE!"=="start" (
     powershell -NoProfile -Command "try { $r=Invoke-RestMethod -TimeoutSec 2 http://127.0.0.1:%PORT%/api/health; if($r.ok){exit 0}else{exit 1} } catch { exit 1 }" >nul 2>&1
     if not errorlevel 1 (
         if "!QUIET!"=="0" echo [info] server is already running on port %PORT%.
-        REM 2026-11-08 ç”¨æˆ·å®šè®º: å¯åŠ¨è„šæœ¬ä¸å†è‡ªåŠ¨å¼€æµè§ˆå™¨
+        REM 2026-11-08 ÓÃ»§¶¨ÂÛ: Æô¶¯½Å±¾²»ÔÙ×Ô¶¯¿ªä¯ÀÀÆ÷
         exit /b 0
     )
 )
@@ -35,8 +35,10 @@ if exist ".venv\Scripts\python.exe" (
     ".venv\Scripts\python.exe" -c "import sys" >nul 2>&1
     if not errorlevel 1 set "PY=.venv\Scripts\python.exe"
 )
+REM 2026-11-23: do NOT fall back to bare "python" -- it can resolve to the
+REM Microsoft Store stub (WindowsApps alias) or the retired Anaconda.
 if not defined PY (where py >nul 2>&1 && set "PY=py")
-if not defined PY (where python >nul 2>&1 && set "PY=python")
+if not defined PY if exist "D:\tools\Dev\Runtime\uvenvs\tools\Scripts\python.exe" set "PY=D:\tools\Dev\Runtime\uvenvs\tools\Scripts\python.exe"
 
 if not defined PY (
     echo [error] no python found >"%ERRLOG%"
@@ -48,7 +50,7 @@ if not defined PY (
 )
 
 if "!QUIET!"=="0" echo [run] Python: !PY!  port: %PORT%
-REM 2026-11-08 ç”¨æˆ·å®šè®º: å¯åŠ¨è„šæœ¬ä¸å†è‡ªåŠ¨å¼€æµè§ˆå™¨, ç•Œé¢è‡ªå·±å¼€ http://127.0.0.1:%PORT%
+REM 2026-11-08 ÓÃ»§¶¨ÂÛ: Æô¶¯½Å±¾²»ÔÙ×Ô¶¯¿ªä¯ÀÀÆ÷, ½çÃæ×Ô¼º¿ª http://127.0.0.1:%PORT%
 "!PY!" "%~dp0server.py" --port %PORT% 2>>"%ERRLOG%"
 set "EC=!errorlevel!"
 if not "!EC!"=="0" (
